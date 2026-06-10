@@ -1,0 +1,18 @@
+{
+  "name": "bunny-ddns-edge-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/bunny-ddns-edge-script",
+    "packages/create-bunny-ddns"
+  ],
+  "scripts": {
+    "build": "deno task build",
+    "ci": "deno task ci",
+    "fmt": "deno task fmt",
+    "lint": "deno task lint",
+    "spellcheck": "deno task spellcheck",
+    "test": "deno task test",
+    "typecheck": "deno task check"
+  }
+}

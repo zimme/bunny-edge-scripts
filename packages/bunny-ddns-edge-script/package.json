@@ -1,0 +1,51 @@
+{
+  "name": "@zimme/bunny-ddns-edge-script",
+  "version": "1.0.0",
+  "description": "Secure DynDNS-compatible update handler for bunny.net Edge Scripts.",
+  "type": "module",
+  "license": "MIT",
+  "author": "zimme",
+  "homepage": "https://github.com/zimme/bunny-net-ddns-edge-script#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zimme/bunny-net-ddns-edge-script.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zimme/bunny-net-ddns-edge-script/issues"
+  },
+  "keywords": [
+    "bunny.net",
+    "bunny",
+    "edge-script",
+    "ddns",
+    "dyndns",
+    "inadyn",
+    "dns"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/mod.d.ts",
+      "import": "./dist/mod.js"
+    }
+  },
+  "types": "./dist/mod.d.ts",
+  "files": [
+    "dist/app.d.ts",
+    "dist/app.js",
+    "dist/app.js.d.ts",
+    "dist/mod.d.ts",
+    "dist/mod.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "deno task build",
+    "prepack": "deno task build",
+    "test": "deno task test",
+    "typecheck": "deno task check"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}
