@@ -1,0 +1,39 @@
+name: Bug Report
+description: Report reproducible incorrect behavior.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: bunny-ddns-edge version
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Sanitized configuration
+      description: Include relevant env vars with secrets redacted.
+      render: text
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Steps, request URL shape, and observed DDNS response body.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true

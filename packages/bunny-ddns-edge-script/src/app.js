@@ -1,0 +1,1135 @@
+// @ts-check
+// @ts-self-types="./app.d.ts"
+
+export const DNS_RECORD_TYPE_A = 0;
+export const DNS_RECORD_TYPE_AAAA = 1;
+
+const DEFAULT_API_BASE_URL = "https://api.bunny.net";
+const DEFAULT_TTL_SECONDS = 900;
+const DEFAULT_MAX_HOSTNAMES = 25;
+const DEFAULT_MANAGED_COMMENT = "Managed by bunny-ddns-edge-script";
+
+/**
+ * @typedef {typeof DNS_RECORD_TYPE_A | typeof DNS_RECORD_TYPE_AAAA} DdnsRecordType
+ */
+
+/**
+ * @typedef {(input: string | URL | Request, init?: RequestInit) => Promise<Response>} Fetcher
+ */
+
+/**
+ * @typedef {object} BunnyDnsRecord
+ * @property {number} Id
+ * @property {number} Type
+ * @property {number | null} [Ttl]
+ * @property {string | null} [Value]
+ * @property {string | null} [Name]
+ * @property {number | null} [Weight]
+ * @property {number | null} [Priority]
+ * @property {number | null} [Port]
+ * @property {number | null} [Flags]
+ * @property {string | null} [Tag]
+ * @property {number | null} [PullZoneId]
+ * @property {number | null} [ScriptId]
+ * @property {boolean | null} [Accelerated]
+ * @property {number | null} [AcceleratedPullZoneId]
+ * @property {number | null} [MonitorType]
+ * @property {number | null} [GeolocationLatitude]
+ * @property {number | null} [GeolocationLongitude]
+ * @property {Array<{ Name: string, Value: string }> | null} [EnviromentalVariables]
+ * @property {string | null} [LatencyZone]
+ * @property {number | null} [SmartRoutingType]
+ * @property {boolean | null} [Disabled]
+ * @property {string | null} [Comment]
+ * @property {boolean | null} [AutoSslIssuance]
+ */
+
+/**
+ * @typedef {object} BunnyDnsZone
+ * @property {number} Id
+ * @property {string} Domain
+ * @property {BunnyDnsRecord[] | null} [Records]
+ */
+
+/**
+ * @typedef {"reject" | "update-all"} MultiRecordMode
+ */
+
+/**
+ * @typedef {object} RuntimeConfig
+ * @property {string} apiBaseUrl
+ * @property {string} bunnyApiKey
+ * @property {string[]} sharedSecrets
+ * @property {string} [username]
+ * @property {string[]} allowedHosts
+ * @property {string[]} deniedHosts
+ * @property {string[]} allowedZones
+ * @property {string[]} deniedZones
+ * @property {boolean} autoCreate
+ * @property {number} defaultTtl
+ * @property {boolean} allowInsecureHttp
+ * @property {MultiRecordMode} multiRecordMode
+ * @property {number} maxHostnames
+ * @property {string} managedComment
+ */
+
+/**
+ * @typedef {object} EnvReader
+ * @property {(name: string) => string | undefined} get
+ */
+
+/**
+ * @typedef {object} HandlerOptions
+ * @property {RuntimeConfig} config
+ * @property {Fetcher} [fetcher]
+ */
+
+/**
+ * @typedef {object} BasicCredentials
+ * @property {string} username
+ * @property {string} password
+ */
+
+/**
+ * @typedef {object} RequestedAddress
+ * @property {string} ip
+ * @property {DdnsRecordType} type
+ */
+
+/** @typedef {"good" | "nochg" | "nohost" | "notfqdn" | "badip" | "badauth" | "badagent" | "numhost" | "!yours" | "dnserr" | "911"} DdnsCode */
+
+/**
+ * @typedef {object} DdnsLine
+ * @property {DdnsCode} code
+ * @property {string} [detail]
+ */
+
+/** @typedef {{ kind: "none", address: RequestedAddress } | { kind: "create", address: RequestedAddress, name: string } | { kind: "update", address: RequestedAddress, records: BunnyDnsRecord[] }} PlannedAction */
+
+/**
+ * @typedef {object} HostPlan
+ * @property {string} hostname
+ * @property {BunnyDnsZone} zone
+ * @property {PlannedAction[]} actions
+ */
+
+/**
+ * @typedef {object} BunnyListResponse
+ * @property {BunnyDnsZone[] | null} [Items]
+ * @property {number} [CurrentPage]
+ * @property {number} [TotalItems]
+ * @property {boolean} [HasMoreItems]
+ */
+
+/**
+ * @typedef {{ kind: "ok", values: string[] } | { kind: "error", code: DdnsCode }} ParsedHostnames
+ */
+
+/**
+ * @typedef {{ kind: "ok", values: RequestedAddress[] } | { kind: "error", code: DdnsCode }} ParsedRequestedAddresses
+ */
+
+/**
+ * @typedef {{ kind: "ok", value: HostPlan } | { kind: "error", line: DdnsLine }} PlannedHostnameUpdate
+ */
+
+/**
+ * @typedef {object} ZoneCandidate
+ * @property {BunnyDnsZone} zone
+ * @property {string} domain
+ */
+
+/**
+ * @param {HandlerOptions} options
+ * @returns {(request: Request) => Promise<Response>}
+ */
+export function createHandler(options) {
+  const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
+  const client = new BunnyDnsClient(options.config, fetcher);
+
+  return async (request) => {
+    try {
+      return await routeRequest(request, options.config, client);
+    } catch (error) {
+      console.error(
+        "[bunny-ddns-edge-script] unhandled request failure",
+        error,
+      );
+      return ddnsResponse([{ code: "911" }]);
+    }
+  };
+}
+
+export const createBunnyDdnsHandler = createHandler;
+
+/**
+ * @param {EnvReader} env
+ * @returns {RuntimeConfig}
+ */
+export function readConfigFromEnv(env) {
+  const bunnyApiKey = env.get("BUNNY_API_KEY") ?? env.get("BUNNY_ACCESS_KEY");
+  if (!bunnyApiKey) {
+    throw new Error("Missing required BUNNY_API_KEY secret.");
+  }
+
+  const sharedSecrets = parseList(
+    env.get("DDNS_SHARED_SECRETS") ?? env.get("DDNS_SHARED_SECRET"),
+  );
+  if (sharedSecrets.length === 0) {
+    throw new Error("Missing required DDNS_SHARED_SECRET secret.");
+  }
+
+  return {
+    apiBaseUrl: env.get("DDNS_API_BASE_URL") ?? DEFAULT_API_BASE_URL,
+    bunnyApiKey,
+    sharedSecrets,
+    username: emptyToUndefined(env.get("DDNS_USERNAME")),
+    allowedHosts: normalizePatterns(parseList(env.get("DDNS_ALLOWED_HOSTS"))),
+    deniedHosts: normalizePatterns(parseList(env.get("DDNS_DENIED_HOSTS"))),
+    allowedZones: normalizePatterns(parseList(env.get("DDNS_ALLOWED_ZONES"))),
+    deniedZones: normalizePatterns(parseList(env.get("DDNS_DENIED_ZONES"))),
+    autoCreate: parseBoolean(env.get("DDNS_AUTO_CREATE"), true),
+    defaultTtl: parseInteger(
+      env.get("DDNS_TTL"),
+      DEFAULT_TTL_SECONDS,
+      60,
+      2_147_483_647,
+    ),
+    allowInsecureHttp: parseBoolean(
+      env.get("DDNS_ALLOW_INSECURE_HTTP"),
+      false,
+    ),
+    multiRecordMode: parseMultiRecordMode(env.get("DDNS_MULTI_RECORD_MODE")),
+    maxHostnames: parseInteger(
+      env.get("DDNS_MAX_HOSTNAMES"),
+      DEFAULT_MAX_HOSTNAMES,
+      1,
+      100,
+    ),
+    managedComment: env.get("DDNS_RECORD_COMMENT") ?? DEFAULT_MANAGED_COMMENT,
+  };
+}
+
+export const readBunnyDdnsConfigFromEnv = readConfigFromEnv;
+
+/**
+ * @param {string} hostname
+ * @returns {string | undefined}
+ */
+export function normalizeHostname(hostname) {
+  const normalized = hostname.trim().replace(/\.$/, "").toLowerCase();
+  if (normalized.length === 0 || normalized.length > 253) {
+    return undefined;
+  }
+
+  const labels = normalized.split(".");
+  if (labels.length < 2) {
+    return undefined;
+  }
+
+  for (const label of labels) {
+    if (
+      label.length === 0 || label.length > 63 ||
+      !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)
+    ) {
+      return undefined;
+    }
+  }
+
+  return normalized;
+}
+
+/**
+ * @param {string} ip
+ * @returns {RequestedAddress | undefined}
+ */
+export function classifyIpAddress(ip) {
+  const normalized = ip.trim();
+  if (isValidIpv4(normalized)) {
+    return { ip: normalized, type: DNS_RECORD_TYPE_A };
+  }
+
+  if (isValidIpv6(normalized)) {
+    return { ip: normalized.toLowerCase(), type: DNS_RECORD_TYPE_AAAA };
+  }
+
+  return undefined;
+}
+
+/**
+ * @param {string} hostname
+ * @param {BunnyDnsZone} zone
+ * @param {RuntimeConfig} config
+ * @returns {boolean}
+ */
+export function isHostnameAllowed(hostname, zone, config) {
+  const zoneDomain = normalizeHostname(zone.Domain);
+  if (!zoneDomain) {
+    return false;
+  }
+
+  if (matchesAny(hostname, config.deniedHosts)) {
+    return false;
+  }
+
+  if (matchesAny(zoneDomain, config.deniedZones)) {
+    return false;
+  }
+
+  if (
+    config.allowedHosts.length > 0 &&
+    !matchesAny(hostname, config.allowedHosts)
+  ) {
+    return false;
+  }
+
+  if (
+    config.allowedZones.length > 0 &&
+    !matchesAny(zoneDomain, config.allowedZones)
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+class BunnyDnsClient {
+  #config;
+  #fetcher;
+
+  /**
+   * @param {RuntimeConfig} config
+   * @param {Fetcher} fetcher
+   */
+  constructor(config, fetcher) {
+    this.#config = config;
+    this.#fetcher = fetcher;
+  }
+
+  /**
+   * @returns {Promise<BunnyDnsZone[]>}
+   */
+  async listZones() {
+    /** @type {BunnyDnsZone[]} */
+    const zones = [];
+    let page = 1;
+
+    while (true) {
+      const url = new URL("/dnszone", this.#config.apiBaseUrl);
+      url.searchParams.set("page", String(page));
+      url.searchParams.set("perPage", "1000");
+
+      const response = await this.#fetcher(url, {
+        headers: this.#apiHeaders(),
+      });
+      await assertBunnyResponse(response, "list DNS zones");
+
+      const body = /** @type {BunnyListResponse} */ (await response.json());
+      zones.push(...(body.Items ?? []));
+
+      if (!body.HasMoreItems) {
+        return zones;
+      }
+
+      page += 1;
+    }
+  }
+
+  /**
+   * @param {BunnyDnsZone} zone
+   * @param {BunnyDnsRecord} record
+   * @param {RequestedAddress} address
+   * @returns {Promise<void>}
+   */
+  async updateRecord(zone, record, address) {
+    const url = new URL(
+      `/dnszone/${zone.Id}/records/${record.Id}`,
+      this.#config.apiBaseUrl,
+    );
+    const payload = recordToUpdatePayload(record, address);
+
+    const response = await this.#fetcher(url, {
+      method: "POST",
+      headers: this.#apiHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+    });
+    await assertBunnyResponse(response, `update DNS record ${record.Id}`);
+  }
+
+  /**
+   * @param {BunnyDnsZone} zone
+   * @param {string} name
+   * @param {RequestedAddress} address
+   * @returns {Promise<void>}
+   */
+  async createRecord(zone, name, address) {
+    const url = new URL(`/dnszone/${zone.Id}/records`, this.#config.apiBaseUrl);
+    const payload = {
+      Type: address.type,
+      Ttl: this.#config.defaultTtl,
+      Value: address.ip,
+      Name: name,
+      Disabled: false,
+      Comment: this.#config.managedComment,
+    };
+
+    const response = await this.#fetcher(url, {
+      method: "PUT",
+      headers: this.#apiHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+    });
+    await assertBunnyResponse(response, "create DNS record");
+  }
+
+  /**
+   * @param {Record<string, string>} [extra]
+   * @returns {Headers}
+   */
+  #apiHeaders(extra) {
+    const headers = new Headers(extra);
+    headers.set("AccessKey", this.#config.bunnyApiKey);
+    return headers;
+  }
+}
+
+/**
+ * @param {Request} request
+ * @param {RuntimeConfig} config
+ * @param {BunnyDnsClient} client
+ * @returns {Promise<Response>}
+ */
+async function routeRequest(request, config, client) {
+  const url = new URL(request.url);
+
+  if (!isSecureRequest(request, url, config)) {
+    return plainResponse("badagent\n", 400);
+  }
+
+  if (isHealthPath(url.pathname)) {
+    return plainResponse("ok\n", 200);
+  }
+
+  if (isCheckIpPath(url.pathname)) {
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      return plainResponse("method not allowed\n", 405, {
+        Allow: "GET, HEAD",
+      });
+    }
+
+    const address = classifyIpAddress(getClientIp(request) ?? "");
+    if (!address) {
+      return ddnsResponse([{ code: "badip" }]);
+    }
+
+    return plainResponse(`${address.ip}\n`, 200);
+  }
+
+  if (!isUpdatePath(url.pathname)) {
+    return plainResponse("not found\n", 404);
+  }
+
+  if (request.method !== "GET") {
+    return plainResponse("method not allowed\n", 405, { Allow: "GET" });
+  }
+
+  if (hasQueryCredentials(url)) {
+    return ddnsResponse([{ code: "badauth" }]);
+  }
+
+  if (!isAuthorized(request, config)) {
+    return ddnsResponse([{ code: "badauth" }]);
+  }
+
+  const hostnames = parseHostnames(url.searchParams.get("hostname"));
+  if (hostnames.kind === "error") {
+    return ddnsResponse([{ code: hostnames.code }]);
+  }
+
+  if (hostnames.values.length > config.maxHostnames) {
+    return ddnsResponse([{ code: "numhost" }]);
+  }
+
+  const addresses = parseRequestedAddresses(url, request);
+  if (addresses.kind === "error") {
+    return ddnsResponse([{ code: addresses.code }]);
+  }
+
+  const zones = await client.listZones();
+  /** @type {DdnsLine[]} */
+  const lines = [];
+
+  for (const hostname of hostnames.values) {
+    const plan = planHostnameUpdate(hostname, addresses.values, zones, config);
+    if (plan.kind === "error") {
+      lines.push(plan.line);
+      continue;
+    }
+
+    try {
+      const changed = await executePlan(plan.value, client);
+      lines.push({
+        code: changed ? "good" : "nochg",
+        detail: addresses.values.map((address) => address.ip).join(","),
+      });
+    } catch (error) {
+      console.error(
+        "[bunny-ddns-edge-script] Bunny DNS mutation failed",
+        error,
+      );
+      lines.push({ code: "911" });
+    }
+  }
+
+  return ddnsResponse(lines);
+}
+
+/**
+ * @param {string} hostname
+ * @param {RequestedAddress[]} addresses
+ * @param {BunnyDnsZone[]} zones
+ * @param {RuntimeConfig} config
+ * @returns {PlannedHostnameUpdate}
+ */
+function planHostnameUpdate(hostname, addresses, zones, config) {
+  const zone = findBestZone(hostname, zones);
+  if (!zone) {
+    return { kind: "error", line: { code: "nohost" } };
+  }
+
+  if (!isHostnameAllowed(hostname, zone, config)) {
+    return { kind: "error", line: { code: "!yours" } };
+  }
+
+  /** @type {PlannedAction[]} */
+  const actions = [];
+
+  for (const address of addresses) {
+    const matchingRecords = getMatchingRecords(zone, hostname, address.type);
+
+    if (matchingRecords.length === 0) {
+      if (!config.autoCreate) {
+        return { kind: "error", line: { code: "nohost" } };
+      }
+
+      actions.push({
+        kind: "create",
+        address,
+        name: relativeRecordName(hostname, zone.Domain),
+      });
+      continue;
+    }
+
+    const allAlreadyCurrent = matchingRecords.every((record) =>
+      record.Value === address.ip
+    );
+    if (allAlreadyCurrent) {
+      actions.push({ kind: "none", address });
+      continue;
+    }
+
+    if (matchingRecords.length > 1 && config.multiRecordMode === "reject") {
+      return { kind: "error", line: { code: "dnserr" } };
+    }
+
+    actions.push({
+      kind: "update",
+      address,
+      records: config.multiRecordMode === "update-all"
+        ? matchingRecords
+        : [matchingRecords[0]],
+    });
+  }
+
+  return {
+    kind: "ok",
+    value: {
+      hostname,
+      zone,
+      actions,
+    },
+  };
+}
+
+/**
+ * @param {HostPlan} plan
+ * @param {BunnyDnsClient} client
+ * @returns {Promise<boolean>}
+ */
+async function executePlan(plan, client) {
+  let changed = false;
+
+  for (const action of plan.actions) {
+    if (action.kind === "none") {
+      continue;
+    }
+
+    changed = true;
+
+    if (action.kind === "create") {
+      await client.createRecord(plan.zone, action.name, action.address);
+      continue;
+    }
+
+    for (const record of action.records) {
+      await client.updateRecord(plan.zone, record, action.address);
+    }
+  }
+
+  return changed;
+}
+
+/**
+ * @param {string | null} rawHostname
+ * @returns {ParsedHostnames}
+ */
+function parseHostnames(rawHostname) {
+  if (!rawHostname) {
+    return { kind: "error", code: "nohost" };
+  }
+
+  const values = rawHostname.split(",").map((hostname) =>
+    normalizeHostname(hostname)
+  );
+
+  if (values.some((hostname) => !hostname)) {
+    return { kind: "error", code: "notfqdn" };
+  }
+
+  const uniqueValues = [...new Set(/** @type {string[]} */ (values))];
+  if (uniqueValues.length === 0) {
+    return { kind: "error", code: "nohost" };
+  }
+
+  return { kind: "ok", values: uniqueValues };
+}
+
+/**
+ * @param {URL} url
+ * @param {Request} _request
+ * @returns {ParsedRequestedAddresses}
+ */
+function parseRequestedAddresses(url, _request) {
+  const requestedIps = /** @type {string[]} */ ([
+    url.searchParams.get("myip"),
+    url.searchParams.get("myip6"),
+    url.searchParams.get("ip"),
+  ].filter((value) => Boolean(value)));
+
+  if (requestedIps.length === 0) {
+    return { kind: "error", code: "badip" };
+  }
+
+  const addresses = requestedIps.map(classifyIpAddress);
+  if (addresses.some((address) => !address)) {
+    return { kind: "error", code: "badip" };
+  }
+
+  /** @type {Map<DdnsRecordType, RequestedAddress>} */
+  const byType = new Map();
+  for (const address of /** @type {RequestedAddress[]} */ (addresses)) {
+    const existing = byType.get(address.type);
+    if (existing && existing.ip !== address.ip) {
+      return { kind: "error", code: "badip" };
+    }
+    byType.set(address.type, address);
+  }
+
+  return { kind: "ok", values: [...byType.values()] };
+}
+
+/**
+ * @param {string} hostname
+ * @param {BunnyDnsZone[]} zones
+ * @returns {BunnyDnsZone | undefined}
+ */
+function findBestZone(hostname, zones) {
+  const candidates = /** @type {ZoneCandidate[]} */ (
+    zones
+      .map((zone) => ({
+        zone,
+        domain: normalizeHostname(zone.Domain),
+      }))
+      .filter((candidate) => Boolean(candidate.domain))
+  )
+    .filter(({ domain }) =>
+      hostname === domain || hostname.endsWith(`.${domain}`)
+    )
+    .sort((left, right) => right.domain.length - left.domain.length);
+
+  return candidates[0]?.zone;
+}
+
+/**
+ * @param {BunnyDnsZone} zone
+ * @param {string} hostname
+ * @param {DdnsRecordType} type
+ * @returns {BunnyDnsRecord[]}
+ */
+function getMatchingRecords(zone, hostname, type) {
+  return (zone.Records ?? []).filter((record) =>
+    record.Type === type && recordHostname(record, zone.Domain) === hostname
+  );
+}
+
+/**
+ * @param {BunnyDnsRecord} record
+ * @param {string} zoneDomain
+ * @returns {string | undefined}
+ */
+function recordHostname(record, zoneDomain) {
+  const normalizedZone = normalizeHostname(zoneDomain);
+  if (!normalizedZone) {
+    return undefined;
+  }
+
+  const name = (record.Name ?? "").trim().replace(/\.$/, "").toLowerCase();
+  if (name === "" || name === "@") {
+    return normalizedZone;
+  }
+
+  if (name === normalizedZone || name.endsWith(`.${normalizedZone}`)) {
+    return normalizeHostname(name);
+  }
+
+  return normalizeHostname(`${name}.${normalizedZone}`);
+}
+
+/**
+ * @param {string} hostname
+ * @param {string} zoneDomain
+ * @returns {string}
+ */
+function relativeRecordName(hostname, zoneDomain) {
+  const normalizedZone = normalizeHostname(zoneDomain);
+  if (!normalizedZone || hostname === normalizedZone) {
+    return "";
+  }
+
+  return hostname.slice(0, -(normalizedZone.length + 1));
+}
+
+/**
+ * @param {BunnyDnsRecord} record
+ * @param {RequestedAddress} address
+ * @returns {Record<string, unknown>}
+ */
+function recordToUpdatePayload(record, address) {
+  return stripUndefined({
+    Type: address.type,
+    Ttl: record.Ttl,
+    Value: address.ip,
+    Name: record.Name,
+    Weight: record.Weight,
+    Priority: record.Priority,
+    Flags: record.Flags,
+    Tag: record.Tag,
+    Port: record.Port,
+    PullZoneId: record.PullZoneId ?? record.AcceleratedPullZoneId,
+    ScriptId: record.ScriptId,
+    Accelerated: record.Accelerated,
+    MonitorType: record.MonitorType,
+    GeolocationLatitude: record.GeolocationLatitude,
+    GeolocationLongitude: record.GeolocationLongitude,
+    LatencyZone: record.LatencyZone,
+    SmartRoutingType: record.SmartRoutingType,
+    Disabled: record.Disabled,
+    EnviromentalVariables: record.EnviromentalVariables,
+    Comment: record.Comment,
+    AutoSslIssuance: record.AutoSslIssuance,
+    Id: record.Id,
+  });
+}
+
+/**
+ * @param {Record<string, unknown>} input
+ * @returns {Record<string, unknown>}
+ */
+function stripUndefined(input) {
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined),
+  );
+}
+
+/**
+ * @param {Response} response
+ * @param {string} operation
+ * @returns {Promise<void>}
+ */
+async function assertBunnyResponse(response, operation) {
+  if (response.ok) {
+    return;
+  }
+
+  const body = await response.text().catch(() => "");
+  throw new Error(
+    `Failed to ${operation}: HTTP ${response.status} ${body}`.trim(),
+  );
+}
+
+/**
+ * @param {Request} request
+ * @param {RuntimeConfig} config
+ * @returns {boolean}
+ */
+function isAuthorized(request, config) {
+  const credentials = parseBasicAuth(request.headers.get("Authorization"));
+  if (!credentials) {
+    return false;
+  }
+
+  if (
+    config.username &&
+    !constantTimeEqual(credentials.username, config.username)
+  ) {
+    return false;
+  }
+
+  return config.sharedSecrets.some((secret) =>
+    constantTimeEqual(credentials.password, secret)
+  );
+}
+
+/**
+ * @param {string | null} header
+ * @returns {BasicCredentials | undefined}
+ */
+function parseBasicAuth(header) {
+  if (!header?.toLowerCase().startsWith("basic ")) {
+    return undefined;
+  }
+
+  try {
+    const decoded = globalThis.atob(header.slice(6).trim());
+    const separatorIndex = decoded.indexOf(":");
+    if (separatorIndex < 0) {
+      return undefined;
+    }
+
+    return {
+      username: decoded.slice(0, separatorIndex),
+      password: decoded.slice(separatorIndex + 1),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * @param {string} left
+ * @param {string} right
+ * @returns {boolean}
+ */
+function constantTimeEqual(left, right) {
+  const leftBytes = new TextEncoder().encode(left);
+  const rightBytes = new TextEncoder().encode(right);
+  const length = Math.max(leftBytes.length, rightBytes.length);
+  let difference = leftBytes.length ^ rightBytes.length;
+
+  for (let index = 0; index < length; index += 1) {
+    difference |= (leftBytes[index] ?? 0) ^ (rightBytes[index] ?? 0);
+  }
+
+  return difference === 0;
+}
+
+/**
+ * @param {URL} url
+ * @returns {boolean}
+ */
+function hasQueryCredentials(url) {
+  const credentialKeys = ["user", "username", "password", "pass", "token"];
+  return credentialKeys.some((key) => url.searchParams.has(key));
+}
+
+/**
+ * @param {Request} request
+ * @param {URL} url
+ * @param {RuntimeConfig} config
+ * @returns {boolean}
+ */
+function isSecureRequest(request, url, config) {
+  if (config.allowInsecureHttp) {
+    return true;
+  }
+
+  if (url.protocol === "https:") {
+    return true;
+  }
+
+  const forwardedProto = request.headers.get("x-forwarded-proto")
+    ?.split(",")[0]
+    ?.trim()
+    ?.toLowerCase();
+  if (forwardedProto === "https") {
+    return true;
+  }
+
+  return forwardedHeaderProto(request.headers.get("forwarded")) === "https";
+}
+
+/**
+ * @param {string | null} forwarded
+ * @returns {string | undefined}
+ */
+function forwardedHeaderProto(forwarded) {
+  const firstHop = forwarded?.split(",")[0]?.trim();
+  if (!firstHop) {
+    return undefined;
+  }
+
+  for (const parameter of firstHop.split(";")) {
+    const separatorIndex = parameter.indexOf("=");
+    if (separatorIndex < 0) {
+      continue;
+    }
+
+    const key = parameter.slice(0, separatorIndex).trim().toLowerCase();
+    if (key !== "proto") {
+      continue;
+    }
+
+    return parameter.slice(separatorIndex + 1).trim().replace(/^"|"$/g, "")
+      .toLowerCase();
+  }
+
+  return undefined;
+}
+
+/**
+ * @param {Request} request
+ * @returns {string | undefined}
+ */
+function getClientIp(request) {
+  const headers = [
+    "cf-connecting-ip",
+    "true-client-ip",
+    "x-real-ip",
+    "x-forwarded-for",
+  ];
+
+  for (const header of headers) {
+    const value = request.headers.get(header);
+    if (!value) {
+      continue;
+    }
+
+    const candidate = value.split(",")[0]?.trim();
+    if (candidate && classifyIpAddress(candidate)) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * @param {string} pathname
+ * @returns {boolean}
+ */
+function isUpdatePath(pathname) {
+  return pathname === "/nic/update" || pathname === "/update";
+}
+
+/**
+ * @param {string} pathname
+ * @returns {boolean}
+ */
+function isCheckIpPath(pathname) {
+  return pathname === "/checkip" || pathname === "/nic/checkip" ||
+    pathname === "/ip";
+}
+
+/**
+ * @param {string} pathname
+ * @returns {boolean}
+ */
+function isHealthPath(pathname) {
+  return pathname === "/health" || pathname === "/healthz";
+}
+
+/**
+ * @param {DdnsLine[]} lines
+ * @returns {Response}
+ */
+function ddnsResponse(lines) {
+  const status = lines.some((line) => line.code === "badauth") ? 401 : 200;
+  const body = lines
+    .map((line) => line.detail ? `${line.code} ${line.detail}` : line.code)
+    .join("\n") + "\n";
+
+  const headers = new Headers({
+    "Cache-Control": "no-store",
+    "Content-Type": "text/plain; charset=utf-8",
+  });
+
+  if (status === 401) {
+    headers.set(
+      "WWW-Authenticate",
+      'Basic realm="@zimme/bunny-ddns-edge-script"',
+    );
+  }
+
+  return new Response(body, { status, headers });
+}
+
+/**
+ * @param {string} body
+ * @param {number} status
+ * @param {Record<string, string>} [extraHeaders]
+ * @returns {Response}
+ */
+function plainResponse(body, status, extraHeaders) {
+  const headers = new Headers({
+    "Cache-Control": "no-store",
+    "Content-Type": "text/plain; charset=utf-8",
+    ...extraHeaders,
+  });
+  return new Response(body, { status, headers });
+}
+
+/**
+ * @param {string} ip
+ * @returns {boolean}
+ */
+function isValidIpv4(ip) {
+  const parts = ip.split(".");
+  if (parts.length !== 4) {
+    return false;
+  }
+
+  return parts.every((part) => {
+    if (!/^(?:0|[1-9][0-9]{0,2})$/.test(part)) {
+      return false;
+    }
+
+    return Number(part) <= 255;
+  });
+}
+
+/**
+ * @param {string} ip
+ * @returns {boolean}
+ */
+function isValidIpv6(ip) {
+  if (
+    !ip.includes(":") || ip.includes("%") || ip.includes("[") ||
+    ip.includes("]")
+  ) {
+    return false;
+  }
+
+  try {
+    const url = new URL(`http://[${ip}]/`);
+    return url.hostname.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * @param {string} value
+ * @param {string[]} patterns
+ * @returns {boolean}
+ */
+function matchesAny(value, patterns) {
+  return patterns.some((pattern) => matchesPattern(value, pattern));
+}
+
+/**
+ * @param {string} value
+ * @param {string} pattern
+ * @returns {boolean}
+ */
+function matchesPattern(value, pattern) {
+  if (pattern.startsWith("*.")) {
+    const suffix = pattern.slice(2);
+    return value.endsWith(`.${suffix}`) && value !== suffix;
+  }
+
+  return value === pattern;
+}
+
+/**
+ * @param {string[]} patterns
+ * @returns {string[]}
+ */
+function normalizePatterns(patterns) {
+  return patterns.map((pattern) =>
+    pattern.trim().replace(/\.$/, "")
+      .toLowerCase()
+  )
+    .filter((pattern) => pattern.length > 0);
+}
+
+/**
+ * @param {string | undefined} value
+ * @returns {string[]}
+ */
+function parseList(value) {
+  return (value ?? "")
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+/**
+ * @param {string | undefined} value
+ * @returns {string | undefined}
+ */
+function emptyToUndefined(value) {
+  if (!value || value.trim() === "") {
+    return undefined;
+  }
+
+  return value;
+}
+
+/**
+ * @param {string | undefined} value
+ * @param {boolean} defaultValue
+ * @returns {boolean}
+ */
+function parseBoolean(value, defaultValue) {
+  if (!value) {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return defaultValue;
+}
+
+/**
+ * @param {string | undefined} value
+ * @param {number} defaultValue
+ * @param {number} min
+ * @param {number} max
+ * @returns {number}
+ */
+function parseInteger(value, defaultValue, min, max) {
+  if (!value) {
+    return defaultValue;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed)) {
+    return defaultValue;
+  }
+
+  return Math.min(Math.max(parsed, min), max);
+}
+
+/**
+ * @param {string | undefined} value
+ * @returns {MultiRecordMode}
+ */
+function parseMultiRecordMode(value) {
+  return value?.trim().toLowerCase() === "update-all" ? "update-all" : "reject";
+}

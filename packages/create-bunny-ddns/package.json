@@ -1,0 +1,55 @@
+{
+  "name": "@zimme/create-bunny-ddns",
+  "version": "1.0.0",
+  "description": "Scaffold a Deno Bunny Edge Script repo that uses @zimme/bunny-ddns-edge-script.",
+  "type": "module",
+  "license": "MIT",
+  "author": "zimme",
+  "homepage": "https://github.com/zimme/bunny-net-ddns-edge-script#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zimme/bunny-net-ddns-edge-script.git",
+    "directory": "packages/create-bunny-ddns"
+  },
+  "bugs": {
+    "url": "https://github.com/zimme/bunny-net-ddns-edge-script/issues"
+  },
+  "keywords": [
+    "bunny.net",
+    "bunny",
+    "edge-script",
+    "ddns",
+    "dyndns",
+    "deno",
+    "create"
+  ],
+  "bin": {
+    "create-bunny-ddns": "./dist/main.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/mod.d.ts",
+      "import": "./dist/mod.js"
+    },
+    "./main": {
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.js"
+    }
+  },
+  "types": "./dist/mod.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "deno task build",
+    "prepack": "deno run --allow-read --allow-write --allow-env --allow-run=deno ../../scripts/build_npm_package.ts .",
+    "test": "deno task test",
+    "typecheck": "deno task check"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}

@@ -1,0 +1,49 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "useGitignore": true,
+  "ignorePaths": [
+    ".git",
+    ".cspellcache",
+    ".npm-cache",
+    "dist",
+    "examples/edge-script-repo/generated",
+    "node_modules",
+    "package-lock.json"
+  ],
+  "files": [
+    "**/*.md",
+    "**/*.js",
+    "**/*.ts",
+    "**/*.json",
+    "**/*.yml",
+    "**/*.yaml"
+  ],
+  "words": [
+    "badauth",
+    "badagent",
+    "badip",
+    "bunny",
+    "checkip",
+    "CodeQL",
+    "ComVer",
+    "denoland",
+    "ddns",
+    "dnserr",
+    "dnszone",
+    "DynDNS",
+    "edgescript",
+    "EnviromentalVariables",
+    "healthz",
+    "hostnames",
+    "HOSTNAMES",
+    "inadyn",
+    "myip",
+    "myip6",
+    "nochg",
+    "nohost",
+    "notfqdn",
+    "numhost",
+    "zimme"
+  ]
+}

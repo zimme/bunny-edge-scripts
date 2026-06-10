@@ -1,0 +1,10 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+*.log
+.cspellcache
+dist/
+node_modules/
+.npm-cache/
+coverage/
