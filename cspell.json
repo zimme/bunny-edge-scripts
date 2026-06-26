@@ -25,6 +25,7 @@
     "badip",
     "bunny",
     "checkip",
+    "cloudflared",
     "CodeQL",
     "ComVer",
     "denoland",
@@ -35,6 +36,7 @@
     "edgescript",
     "EnviromentalVariables",
     "healthz",
+    "HMAC",
     "hostnames",
     "HOSTNAMES",
     "inadyn",
@@ -44,6 +46,7 @@
     "nohost",
     "notfqdn",
     "numhost",
+    "tailscale",
     "zimme"
   ]
 }

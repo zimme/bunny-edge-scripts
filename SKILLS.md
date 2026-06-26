@@ -28,6 +28,20 @@ Use when changing how zones or records are listed, matched, created, or updated.
 4. Add tests for record matching and mutation payload behavior.
 5. Run `deno task ci`.
 
+## Change Tunnel Runtime Behavior
+
+Use when modifying route selection, viewer authorization, proxy headers, origin
+signing, or tunnel environment configuration.
+
+1. Keep `@zimme/bunny-tunnel-edge-script` focused on the Bunny Edge Script side
+   of the gateway.
+2. Update `packages/bunny-tunnel-edge-script/src/app.ts`.
+3. Add or update focused tests in
+   `packages/bunny-tunnel-edge-script/tests/app.test.ts`.
+4. Keep private-network connector behavior out of this package unless a matching
+   connector package and protocol are added deliberately.
+5. Run `deno task ci`.
+
 ## Change Deployment
 
 Use when changing GitHub Actions, package output, example build output, or Bunny

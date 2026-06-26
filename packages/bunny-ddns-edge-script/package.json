@@ -5,13 +5,13 @@
   "type": "module",
   "license": "MIT",
   "author": "zimme",
-  "homepage": "https://github.com/zimme/bunny-net-ddns-edge-script#readme",
+  "homepage": "https://github.com/zimme/bunny-edge-scripts#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zimme/bunny-net-ddns-edge-script.git"
+    "url": "git+https://github.com/zimme/bunny-edge-scripts.git"
   },
   "bugs": {
-    "url": "https://github.com/zimme/bunny-net-ddns-edge-script/issues"
+    "url": "https://github.com/zimme/bunny-edge-scripts/issues"
   },
   "keywords": [
     "bunny.net",

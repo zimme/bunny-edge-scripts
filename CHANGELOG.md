@@ -8,6 +8,8 @@ Compatible Versioning (ComVer), so releases are published as `X.Y.0`.
 - Convert project into a monorepo with JSR and npm publishing.
 - Rename published packages to scoped JSR/npm names:
   `@zimme/bunny-ddns-edge-script` and `@zimme/create-bunny-ddns`.
+- Add `@zimme/bunny-tunnel-edge-script`, a Bunny Edge Script HTTP access gateway
+  with route matching, viewer bearer tokens, and signed origin forwarding.
 - Make JSR the default Deno package source for generated deployment repos.
 
 ## 1.0.0 - 2026-05-12

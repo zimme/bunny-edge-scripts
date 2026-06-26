@@ -1,0 +1,39 @@
+name: Deploy Tunnel Edge Script
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
+      DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install dependencies
+        run: deno install
+
+      - name: Build deploy artifact
+        run: deno task build
+
+      - name: Deploy Script to Bunny Edge Scripting
+        uses: BunnyWay/actions/deploy-script@main
+        with:
+          script_id: ${{ env.SCRIPT_ID }}
+          deploy_key: ${{ env.DEPLOY_KEY }}
+          file: generated/script.ts

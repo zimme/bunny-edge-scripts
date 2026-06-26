@@ -40,7 +40,14 @@ for await (const entry of walk(`${packageDir}/src`)) {
 if (hasTypeScript) {
   await runDeno(["bundle", "src/mod.ts", "-o", "dist/mod.js"]);
   if (await exists(`${packageDir}/src/main.ts`)) {
-    await runDeno(["bundle", "src/main.ts", "-o", "dist/main.js"]);
+    await runDeno([
+      "bundle",
+      "--external",
+      "@bunny.net/edgescript-sdk",
+      "src/main.ts",
+      "-o",
+      "dist/main.js",
+    ]);
     try {
       await Deno.chmod(`${distDir}/main.js`, 0o755);
     } catch {

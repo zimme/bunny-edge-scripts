@@ -29,6 +29,15 @@ Use `DDNS_ALLOWED_HOSTS`, `DDNS_ALLOWED_ZONES`, `DDNS_DENIED_HOSTS`, and
 `DDNS_DENIED_ZONES` when a DDNS secret should have narrower power than the whole
 Bunny DNS account.
 
+The tunnel package is an edge reverse proxy/access gateway. It can protect an
+origin with viewer bearer tokens and signed origin forwarding, but it does not
+make a private LAN service reachable by itself. Origins must still be reachable
+from Bunny's edge unless a future connector package is introduced.
+
+If `TUNNEL_ORIGIN_SHARED_SECRET` is set, the script signs origin requests with
+HMAC headers. The origin must verify those headers and reject unsigned or stale
+requests for the signing layer to provide security.
+
 ## Operational Guidance
 
 - Use a long random `DDNS_SHARED_SECRET`.
@@ -41,3 +50,10 @@ Bunny DNS account.
   discovery.
 - Leave `DDNS_MULTI_RECORD_MODE=reject` unless the hostname is intentionally a
   DDNS-managed record set.
+- Use `TUNNEL_VIEWER_TOKEN` or `TUNNEL_VIEWER_TOKENS` when the proxied service
+  should not be public.
+- Use `TUNNEL_ORIGIN_SHARED_SECRET` with origin-side verification when the
+  origin is publicly reachable.
+- Keep `TUNNEL_ALLOW_INSECURE_HTTP=false` in Bunny.
+- Keep origin secrets and viewer tokens in Bunny Edge Script Env Configuration,
+  not in source control.

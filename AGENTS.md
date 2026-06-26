@@ -5,10 +5,12 @@ understand, modify, test, and deploy the project without hidden context.
 
 ## Project Intent
 
-This monorepo publishes two packages:
+This monorepo publishes three packages:
 
 - `@zimme/bunny-ddns-edge-script`, the runtime DDNS handler published to JSR and
   npm.
+- `@zimme/bunny-tunnel-edge-script`, the runtime tunnel/access gateway handler
+  published to JSR and npm.
 - `@zimme/create-bunny-ddns`, the scaffold generator for personal deployment
   repos published to JSR and npm.
 
@@ -22,6 +24,9 @@ the client's behalf.
 - Preserve secure defaults. HTTPS-only, Basic Auth only, no query-string
   credentials, deny-over-allow, and fail-safe multi-record handling are
   intentional.
+- Preserve secure tunnel defaults. HTTPS-only, stripped hop-by-hop headers,
+  stripped viewer authorization, deny-first path filtering, and optional signed
+  origin forwarding are intentional for tunnel work.
 - Keep Bunny deployment simple. Consumer repos should need only a tiny
   `script.ts` entrypoint that imports this package.
 - Do not edit `dist/` directly. Edit `src/`, then run `deno task build` or let
@@ -48,11 +53,19 @@ deno task ci
 
 - `packages/bunny-ddns-edge-script/src/app.js` contains the testable DDNS and
   Bunny DNS logic.
+- `packages/bunny-tunnel-edge-script/src/app.ts` contains the testable tunnel
+  routing, auth, signing, and proxy logic.
 - `packages/bunny-ddns-edge-script/src/mod.ts` is the runtime package
+  entrypoint.
+- `packages/bunny-tunnel-edge-script/src/mod.ts` is the tunnel package
   entrypoint.
 - `packages/create-bunny-ddns/src/main.ts` is the scaffold CLI.
 - `packages/*/dist/` are generated local npm package artifact directories.
 - `scripts/build_npm_package.ts` owns npm package artifact builds.
 - `examples/edge-script-repo` shows the user-owned Bunny Edge Script repo shape.
+- `examples/tunnel-edge-script-repo` shows the user-owned Bunny Tunnel Edge
+  Script repo shape.
 - `packages/bunny-ddns-edge-script/tests/app.test.ts` covers endpoint, auth,
   allow/deny, IP family, and DNS mutation behavior.
+- `packages/bunny-tunnel-edge-script/tests/app.test.ts` covers route selection,
+  viewer auth, path/method filtering, origin signing, and proxy behavior.
