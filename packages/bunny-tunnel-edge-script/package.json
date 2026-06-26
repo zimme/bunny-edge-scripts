@@ -1,7 +1,7 @@
 {
-  "name": "@zimme/create-bunny-ddns",
+  "name": "@zimme/bunny-tunnel-edge-script",
   "version": "1.0.0",
-  "description": "Scaffold a Deno Bunny Edge Script repo that uses @zimme/bunny-ddns-edge-script.",
+  "description": "Secure edge reverse proxy and origin gateway for bunny.net Edge Scripts.",
   "type": "module",
   "license": "MIT",
   "author": "zimme",
@@ -9,7 +9,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/zimme/bunny-edge-scripts.git",
-    "directory": "packages/create-bunny-ddns"
+    "directory": "packages/bunny-tunnel-edge-script"
   },
   "bugs": {
     "url": "https://github.com/zimme/bunny-edge-scripts/issues"
@@ -18,33 +18,31 @@
     "bunny.net",
     "bunny",
     "edge-script",
-    "ddns",
-    "dyndns",
-    "deno",
-    "create"
+    "tunnel",
+    "reverse-proxy",
+    "access",
+    "deno"
   ],
-  "bin": {
-    "create-bunny-ddns": "./dist/main.js"
-  },
   "exports": {
     ".": {
       "types": "./dist/mod.d.ts",
       "import": "./dist/mod.js"
-    },
-    "./main": {
-      "types": "./dist/main.d.ts",
-      "import": "./dist/main.js"
     }
   },
   "types": "./dist/mod.d.ts",
   "files": [
-    "dist",
+    "dist/app.d.ts",
+    "dist/app.js",
+    "dist/bunny-sdk.d.ts",
+    "dist/main.js",
+    "dist/mod.d.ts",
+    "dist/mod.js",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "deno task build",
-    "prepack": "deno run --allow-read --allow-write --allow-env --allow-run=deno ../../scripts/build_npm_package.ts .",
+    "prepack": "deno task build",
     "test": "deno task test",
     "typecheck": "deno task check"
   },

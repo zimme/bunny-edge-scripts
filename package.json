@@ -1,9 +1,10 @@
 {
-  "name": "bunny-ddns-edge-monorepo",
+  "name": "bunny-edge-scripts-monorepo",
   "private": true,
   "type": "module",
   "workspaces": [
     "packages/bunny-ddns-edge-script",
+    "packages/bunny-tunnel-edge-script",
     "packages/create-bunny-ddns"
   ],
   "scripts": {
