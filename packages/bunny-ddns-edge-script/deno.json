@@ -17,7 +17,6 @@
       "README.md",
       "src/app.d.ts",
       "src/app.js",
-      "src/app.js.d.ts",
       "src/mod.ts"
     ]
   }

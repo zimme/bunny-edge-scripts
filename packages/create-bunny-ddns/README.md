@@ -6,8 +6,11 @@ bunny.net Edge Scripting.
 Preferred Deno usage:
 
 ```sh
-deno run -A jsr:@zimme/create-bunny-ddns
+deno create jsr:@zimme/create-bunny-ddns my-bunny-ddns
 ```
+
+The generator resolves the runtime dependency and creates a committed-ready
+`deno.lock` by default. Pass `--no-install` to skip that step.
 
 npm compatibility:
 

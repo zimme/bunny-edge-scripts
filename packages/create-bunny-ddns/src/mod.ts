@@ -12,6 +12,7 @@ export interface ScaffoldOptions {
   allowedZones: string;
   force: boolean;
   dryRun: boolean;
+  installDependencies: boolean;
 }
 
 export interface ScaffoldResult {
@@ -33,6 +34,7 @@ export function defaultOptions(): ScaffoldOptions {
     allowedZones: "",
     force: false,
     dryRun: false,
+    installDependencies: true,
   };
 }
 
@@ -67,7 +69,6 @@ function projectFiles(options: ScaffoldOptions): ProjectFile[] {
   const files: ProjectFile[] = [
     { path: "deno.json", content: denoJson(options) },
     { path: "script.ts", content: scriptTs() },
-    { path: "bunny-sdk.d.ts", content: bunnySdkDts() },
     { path: ".env.example", content: envExample(options) },
     { path: ".gitignore", content: gitignore() },
     { path: "README.md", content: readme(options) },
@@ -92,6 +93,7 @@ function denoJson(options: ScaffoldOptions): string {
     JSON.stringify(
       {
         imports: {
+          "@bunny.net/edgescript-sdk": "npm:@bunny.net/edgescript-sdk@0.12.1",
           "@zimme/bunny-ddns-edge-script": specifier,
         },
         tasks: {
@@ -99,7 +101,7 @@ function denoJson(options: ScaffoldOptions): string {
             "deno bundle --external @bunny.net/edgescript-sdk script.ts -o generated/script.ts && deno fmt generated/script.ts",
           check: "deno check script.ts",
           ci:
-            "deno fmt --check && deno lint && deno task check && deno task build",
+            "deno install --frozen && deno fmt --check && deno lint && deno task check && deno task build",
           fmt: "deno fmt",
           lint: "deno lint",
         },
@@ -111,9 +113,7 @@ function denoJson(options: ScaffoldOptions): string {
 }
 
 function scriptTs(): string {
-  return `/// <reference path="./bunny-sdk.d.ts" />
-
-import * as BunnySDK from "@bunny.net/edgescript-sdk";
+  return `import * as BunnySDK from "@bunny.net/edgescript-sdk";
 import {
   createBunnyDdnsHandler,
   readBunnyDdnsConfigFromEnv,
@@ -126,17 +126,6 @@ const config = readBunnyDdnsConfigFromEnv({
 });
 
 BunnySDK.net.http.serve(createBunnyDdnsHandler({ config }));
-`;
-}
-
-function bunnySdkDts(): string {
-  return `declare module "@bunny.net/edgescript-sdk" {
-  export const net: {
-    http: {
-      serve(handler: (request: Request) => Response | Promise<Response>): void;
-    };
-  };
-}
 `;
 }
 
@@ -155,6 +144,7 @@ DDNS_AUTO_CREATE=true
 DDNS_TTL=900
 DDNS_MULTI_RECORD_MODE=reject
 DDNS_MAX_HOSTNAMES=25
+DDNS_MAX_MUTATIONS=40
 DDNS_RECORD_COMMENT=Managed by bunny-ddns-edge-script
 DDNS_ALLOW_INSECURE_HTTP=false
 `;
@@ -165,6 +155,7 @@ function gitignore(): string {
 .env.*
 !.env.example
 .DS_Store
+.bunny/
 generated/
 node_modules/
 `;
@@ -203,6 +194,7 @@ Set these in Bunny Edge Scripting Env Configuration:
 - Optional: \`DDNS_ALLOWED_ZONES\`
 
 Do not commit real secrets to this repo.
+Commit the generated \`deno.lock\` file so deployments remain reproducible.
 
 ${deploySection}
 
@@ -239,13 +231,25 @@ This path keeps Bunny runtime credentials in Bunny, not GitHub.
 
 | Setting | Value |
 | --- | --- |
-| Install command | \`deno install\` |
+| Install command | \`deno install --frozen\` |
 | Build command | \`deno task build\` |
 | Entry file | \`generated/script.ts\` |
 
 5. Add the runtime secrets in Bunny Edge Script Env Configuration.
 6. Deploy the script from Bunny.
 7. Point your DDNS hostname or custom script hostname at the deployed script.
+
+The official bunny.net CLI can also link this directory, deploy the built
+bundle, and manage Bunny-side configuration:
+
+\`\`\`sh
+bunny login
+bunny scripts link
+deno task build
+bunny scripts deploy generated/script.ts
+\`\`\`
+
+The CLI stores local script linkage under \`.bunny/\`, which this repo ignores.
 `;
 }
 
@@ -287,21 +291,21 @@ jobs:
       DEPLOY_KEY: \${{ secrets.DEPLOY_KEY }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Setup Deno
-        uses: denoland/setup-deno@v2
+        uses: denoland/setup-deno@b7351df727350dca84cb9d725d57dcf5bc82ba26 # v2
         with:
           deno-version: v2.x
 
       - name: Install dependencies
-        run: deno install
+        run: deno install --frozen
 
       - name: Build deploy artifact
         run: deno task build
 
       - name: Deploy Script to Bunny Edge Scripting
-        uses: BunnyWay/actions/deploy-script@main
+        uses: BunnyWay/actions/deploy-script@671d620bdaac002d2aa7f3dd0dda03dd99c5b749 # main
         with:
           script_id: \${{ env.SCRIPT_ID }}
           deploy_key: \${{ env.DEPLOY_KEY }}

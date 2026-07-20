@@ -7,6 +7,8 @@ export const DNS_RECORD_TYPE_AAAA = 1;
 const DEFAULT_API_BASE_URL = "https://api.bunny.net";
 const DEFAULT_TTL_SECONDS = 900;
 const DEFAULT_MAX_HOSTNAMES = 25;
+const DEFAULT_MAX_MUTATIONS = 40;
+const MAX_ZONE_PAGES = 10;
 const DEFAULT_MANAGED_COMMENT = "Managed by bunny-ddns-edge-script";
 
 /**
@@ -70,6 +72,7 @@ const DEFAULT_MANAGED_COMMENT = "Managed by bunny-ddns-edge-script";
  * @property {boolean} allowInsecureHttp
  * @property {MultiRecordMode} multiRecordMode
  * @property {number} maxHostnames
+ * @property {number} maxMutations
  * @property {string} managedComment
  */
 
@@ -179,8 +182,16 @@ export function readConfigFromEnv(env) {
     throw new Error("Missing required DDNS_SHARED_SECRET secret.");
   }
 
+  const allowInsecureHttp = parseBoolean(
+    env.get("DDNS_ALLOW_INSECURE_HTTP"),
+    false,
+  );
+
   return {
-    apiBaseUrl: env.get("DDNS_API_BASE_URL") ?? DEFAULT_API_BASE_URL,
+    apiBaseUrl: parseApiBaseUrl(
+      env.get("DDNS_API_BASE_URL") ?? DEFAULT_API_BASE_URL,
+      allowInsecureHttp,
+    ),
     bunnyApiKey,
     sharedSecrets,
     username: emptyToUndefined(env.get("DDNS_USERNAME")),
@@ -195,16 +206,19 @@ export function readConfigFromEnv(env) {
       60,
       2_147_483_647,
     ),
-    allowInsecureHttp: parseBoolean(
-      env.get("DDNS_ALLOW_INSECURE_HTTP"),
-      false,
-    ),
+    allowInsecureHttp,
     multiRecordMode: parseMultiRecordMode(env.get("DDNS_MULTI_RECORD_MODE")),
     maxHostnames: parseInteger(
       env.get("DDNS_MAX_HOSTNAMES"),
       DEFAULT_MAX_HOSTNAMES,
       1,
       100,
+    ),
+    maxMutations: parseInteger(
+      env.get("DDNS_MAX_MUTATIONS"),
+      DEFAULT_MAX_MUTATIONS,
+      1,
+      DEFAULT_MAX_MUTATIONS,
     ),
     managedComment: env.get("DDNS_RECORD_COMMENT") ?? DEFAULT_MANAGED_COMMENT,
   };
@@ -331,6 +345,12 @@ class BunnyDnsClient {
         return zones;
       }
 
+      if (page >= MAX_ZONE_PAGES) {
+        throw new Error(
+          `Bunny returned more than ${MAX_ZONE_PAGES} DNS zone pages.`,
+        );
+      }
+
       page += 1;
     }
   }
@@ -449,17 +469,28 @@ async function routeRequest(request, config, client) {
     return ddnsResponse([{ code: "numhost" }]);
   }
 
-  const addresses = parseRequestedAddresses(url, request);
+  const addresses = parseRequestedAddresses(url);
   if (addresses.kind === "error") {
     return ddnsResponse([{ code: addresses.code }]);
   }
 
   const zones = await client.listZones();
+  const plans = hostnames.values.map((hostname) =>
+    planHostnameUpdate(hostname, addresses.values, zones, config)
+  );
+  const mutationCount = plans.reduce(
+    (total, plan) =>
+      total + (plan.kind === "ok" ? countMutations(plan.value) : 0),
+    0,
+  );
+  if (mutationCount > config.maxMutations) {
+    return ddnsResponse([{ code: "numhost" }]);
+  }
+
   /** @type {DdnsLine[]} */
   const lines = [];
 
-  for (const hostname of hostnames.values) {
-    const plan = planHostnameUpdate(hostname, addresses.values, zones, config);
+  for (const plan of plans) {
     if (plan.kind === "error") {
       lines.push(plan.line);
       continue;
@@ -481,6 +512,20 @@ async function routeRequest(request, config, client) {
   }
 
   return ddnsResponse(lines);
+}
+
+/**
+ * @param {HostPlan} plan
+ * @returns {number}
+ */
+function countMutations(plan) {
+  return plan.actions.reduce((total, action) => {
+    if (action.kind === "none") {
+      return total;
+    }
+
+    return total + (action.kind === "update" ? action.records.length : 1);
+  }, 0);
 }
 
 /**
@@ -605,10 +650,17 @@ function parseHostnames(rawHostname) {
 
 /**
  * @param {URL} url
- * @param {Request} _request
  * @returns {ParsedRequestedAddresses}
  */
-function parseRequestedAddresses(url, _request) {
+function parseRequestedAddresses(url) {
+  if (
+    ["myip", "myip6", "ip"].some((name) =>
+      url.searchParams.getAll(name).length > 1
+    )
+  ) {
+    return { kind: "error", code: "badip" };
+  }
+
   const requestedIps = /** @type {string[]} */ ([
     url.searchParams.get("myip"),
     url.searchParams.get("myip6"),
@@ -842,57 +894,17 @@ function hasQueryCredentials(url) {
 }
 
 /**
- * @param {Request} request
+ * @param {Request} _request
  * @param {URL} url
  * @param {RuntimeConfig} config
  * @returns {boolean}
  */
-function isSecureRequest(request, url, config) {
+function isSecureRequest(_request, url, config) {
   if (config.allowInsecureHttp) {
     return true;
   }
 
-  if (url.protocol === "https:") {
-    return true;
-  }
-
-  const forwardedProto = request.headers.get("x-forwarded-proto")
-    ?.split(",")[0]
-    ?.trim()
-    ?.toLowerCase();
-  if (forwardedProto === "https") {
-    return true;
-  }
-
-  return forwardedHeaderProto(request.headers.get("forwarded")) === "https";
-}
-
-/**
- * @param {string | null} forwarded
- * @returns {string | undefined}
- */
-function forwardedHeaderProto(forwarded) {
-  const firstHop = forwarded?.split(",")[0]?.trim();
-  if (!firstHop) {
-    return undefined;
-  }
-
-  for (const parameter of firstHop.split(";")) {
-    const separatorIndex = parameter.indexOf("=");
-    if (separatorIndex < 0) {
-      continue;
-    }
-
-    const key = parameter.slice(0, separatorIndex).trim().toLowerCase();
-    if (key !== "proto") {
-      continue;
-    }
-
-    return parameter.slice(separatorIndex + 1).trim().replace(/^"|"$/g, "")
-      .toLowerCase();
-  }
-
-  return undefined;
+  return url.protocol === "https:";
 }
 
 /**
@@ -1090,7 +1102,7 @@ function emptyToUndefined(value) {
  * @returns {boolean}
  */
 function parseBoolean(value, defaultValue) {
-  if (!value) {
+  if (!value || value.trim() === "") {
     return defaultValue;
   }
 
@@ -1103,7 +1115,7 @@ function parseBoolean(value, defaultValue) {
     return false;
   }
 
-  return defaultValue;
+  throw new Error(`Invalid boolean value: ${value}`);
 }
 
 /**
@@ -1118,12 +1130,39 @@ function parseInteger(value, defaultValue, min, max) {
     return defaultValue;
   }
 
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed)) {
-    return defaultValue;
+  if (!/^-?\d+$/.test(value.trim())) {
+    throw new Error(`Invalid integer value: ${value}`);
   }
 
-  return Math.min(Math.max(parsed, min), max);
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) {
+    throw new Error(`Integer value must be between ${min} and ${max}.`);
+  }
+
+  return parsed;
+}
+
+/**
+ * @param {string} value
+ * @param {boolean} allowInsecureHttp
+ * @returns {string}
+ */
+function parseApiBaseUrl(value, allowInsecureHttp) {
+  const url = new URL(value);
+  if (url.username || url.password || url.search || url.hash) {
+    throw new Error(
+      "DDNS_API_BASE_URL cannot contain credentials, query, or fragment.",
+    );
+  }
+
+  if (
+    url.protocol !== "https:" &&
+    !(allowInsecureHttp && url.protocol === "http:")
+  ) {
+    throw new Error("DDNS_API_BASE_URL must use HTTPS.");
+  }
+
+  return url.toString();
 }
 
 /**
@@ -1131,5 +1170,12 @@ function parseInteger(value, defaultValue, min, max) {
  * @returns {MultiRecordMode}
  */
 function parseMultiRecordMode(value) {
-  return value?.trim().toLowerCase() === "update-all" ? "update-all" : "reject";
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized || normalized === "reject") {
+    return "reject";
+  }
+  if (normalized === "update-all") {
+    return "update-all";
+  }
+  throw new Error(`Invalid DDNS_MULTI_RECORD_MODE: ${value}`);
 }

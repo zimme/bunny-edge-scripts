@@ -27,10 +27,16 @@ Set these in Bunny Edge Script Env Configuration:
 - `TUNNEL_ORIGIN`: origin URL, for example `https://origin.example.com`.
 - Optional `TUNNEL_HOST`: public hostname this route should match.
 - Optional `TUNNEL_PATH_PREFIX`: public path prefix to proxy.
-- Optional `TUNNEL_VIEWER_TOKEN` or `TUNNEL_VIEWER_TOKENS`: bearer token
-  required from viewers.
+- `TUNNEL_VIEWER_TOKEN` or `TUNNEL_VIEWER_TOKENS`: bearer token required from
+  viewers by default.
+- Optional `TUNNEL_ALLOW_PUBLIC`: set `true` only when unauthenticated public
+  access is intentional.
 - Optional `TUNNEL_ORIGIN_SHARED_SECRET`: HMAC secret used to sign origin
   requests.
+- Optional `TUNNEL_MAX_BODY_BYTES`: maximum buffered request body, default 10
+  MiB.
+- Optional `TUNNEL_ALLOW_INSECURE_ORIGIN`: default `false`; leave disabled in
+  production.
 
 For multiple routes, set `TUNNEL_ROUTES` to JSON:
 

@@ -11,6 +11,11 @@ Compatible Versioning (ComVer), so releases are published as `X.Y.0`.
 - Add `@zimme/bunny-tunnel-edge-script`, a Bunny Edge Script HTTP access gateway
   with route matching, viewer bearer tokens, and signed origin forwarding.
 - Make JSR the default Deno package source for generated deployment repos.
+- Add native `deno create` scaffolding, dependency lockfiles, Bunny CLI
+  deployment guidance, and OIDC trusted publishing.
+- Enforce Bunny's subrequest budget before DDNS mutations.
+- Harden tunnel transport, origins, forwarding headers, paths, and request body
+  limits, and add origin-side HMAC verification.
 
 ## 1.0.0 - 2026-05-12
 
@@ -28,6 +33,7 @@ Compatible Versioning (ComVer), so releases are published as `X.Y.0`.
 
 ### Fixed
 
-- HTTPS detection now only trusts the first hop in the `Forwarded` header.
+- HTTPS detection uses the request URL and does not trust caller-supplied
+  forwarding headers.
 - Type declarations are generated as part of the build instead of being
   hand-maintained.

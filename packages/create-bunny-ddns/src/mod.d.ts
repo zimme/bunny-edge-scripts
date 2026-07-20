@@ -12,6 +12,7 @@ export interface ScaffoldOptions {
   allowedZones: string;
   force: boolean;
   dryRun: boolean;
+  installDependencies: boolean;
 }
 
 export interface ScaffoldResult {

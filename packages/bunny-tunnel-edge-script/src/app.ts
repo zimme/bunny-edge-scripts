@@ -15,14 +15,23 @@ export interface TunnelRoute {
 
 export interface RuntimeConfig {
   routes: TunnelRoute[];
+  allowPublic: boolean;
   viewerTokens: string[];
   originSharedSecret?: string;
   allowedMethods: string[];
   deniedPathPrefixes: string[];
   allowInsecureHttp: boolean;
+  allowInsecureOrigin: boolean;
   healthPath: string;
+  maxBodyBytes: number;
   preserveHostHeader: boolean;
   requestTimeoutMs: number;
+}
+
+export interface VerifySignatureOptions {
+  body?: ArrayBuffer;
+  now?: () => Date;
+  toleranceSeconds?: number;
 }
 
 export interface HandlerOptions {
@@ -68,6 +77,8 @@ const DEFAULT_ALLOWED_METHODS = [
 ];
 
 const DEFAULT_HEALTH_PATH = "/__bunny_tunnel/healthz";
+const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024;
+const MAX_BODY_BYTES = 32 * 1024 * 1024;
 const SIGNATURE_VERSION = "v1";
 
 export function readBunnyTunnelConfigFromEnv(env: EnvReader): RuntimeConfig {
@@ -80,12 +91,20 @@ export function readBunnyTunnelConfigFromEnv(env: EnvReader): RuntimeConfig {
   const healthPath = normalizePath(
     env.get("TUNNEL_HEALTH_PATH") ?? DEFAULT_HEALTH_PATH,
   );
+  const viewerTokens = splitList(
+    env.get("TUNNEL_VIEWER_TOKENS") ?? env.get("TUNNEL_VIEWER_TOKEN"),
+  );
+  const allowPublic = readBoolean(env.get("TUNNEL_ALLOW_PUBLIC"));
+  if (viewerTokens.length === 0 && !allowPublic) {
+    throw new Error(
+      "Missing TUNNEL_VIEWER_TOKEN. Set TUNNEL_ALLOW_PUBLIC=true only for an intentionally public origin.",
+    );
+  }
 
   return {
     routes,
-    viewerTokens: splitList(
-      env.get("TUNNEL_VIEWER_TOKENS") ?? env.get("TUNNEL_VIEWER_TOKEN"),
-    ),
+    allowPublic,
+    viewerTokens,
     originSharedSecret: optionalString(env.get("TUNNEL_ORIGIN_SHARED_SECRET")),
     allowedMethods:
       splitList(env.get("TUNNEL_ALLOWED_METHODS")).map((method) =>
@@ -94,9 +113,25 @@ export function readBunnyTunnelConfigFromEnv(env: EnvReader): RuntimeConfig {
     deniedPathPrefixes: splitList(env.get("TUNNEL_DENIED_PATH_PREFIXES"))
       .map(normalizePath),
     allowInsecureHttp: readBoolean(env.get("TUNNEL_ALLOW_INSECURE_HTTP")),
+    allowInsecureOrigin: readBoolean(
+      env.get("TUNNEL_ALLOW_INSECURE_ORIGIN"),
+    ),
     healthPath,
+    maxBodyBytes: readInteger(
+      env.get("TUNNEL_MAX_BODY_BYTES"),
+      DEFAULT_MAX_BODY_BYTES,
+      1,
+      MAX_BODY_BYTES,
+      "TUNNEL_MAX_BODY_BYTES",
+    ),
     preserveHostHeader: readBoolean(env.get("TUNNEL_PRESERVE_HOST_HEADER")),
-    requestTimeoutMs: readInteger(env.get("TUNNEL_REQUEST_TIMEOUT_MS"), 30000),
+    requestTimeoutMs: readInteger(
+      env.get("TUNNEL_REQUEST_TIMEOUT_MS"),
+      30000,
+      1,
+      120000,
+      "TUNNEL_REQUEST_TIMEOUT_MS",
+    ),
   };
 }
 
@@ -130,12 +165,12 @@ async function handleRequest(
 ): Promise<Response> {
   const requestUrl = new URL(request.url);
 
-  if (requestUrl.pathname === config.healthPath) {
-    return jsonResponse({ ok: true, service: "bunny-tunnel-edge-script" });
-  }
-
   if (!config.allowInsecureHttp && !isHttpsRequest(request)) {
     return textResponse("HTTPS required\n", 400);
+  }
+
+  if (requestUrl.pathname === config.healthPath) {
+    return jsonResponse({ ok: true, service: "bunny-tunnel-edge-script" });
   }
 
   if (!config.allowedMethods.includes(request.method.toUpperCase())) {
@@ -146,6 +181,10 @@ async function handleRequest(
 
   if (isDeniedPath(requestUrl.pathname, config.deniedPathPrefixes)) {
     return textResponse("not found\n", 404);
+  }
+
+  if (hasAmbiguousEncodedPath(requestUrl.pathname)) {
+    return textResponse("invalid path\n", 400);
   }
 
   if (!isViewerAuthorized(request, config.viewerTokens)) {
@@ -159,9 +198,11 @@ async function handleRequest(
     return textResponse("no route\n", 404);
   }
 
-  const body = request.method === "GET" || request.method === "HEAD"
-    ? undefined
-    : await request.arrayBuffer();
+  const bodyResult = await readRequestBody(request, config.maxBodyBytes);
+  if (bodyResult.kind === "too-large") {
+    return textResponse("request body too large\n", 413);
+  }
+  const body = bodyResult.body;
 
   const headers = await buildUpstreamHeaders({
     body,
@@ -212,11 +253,6 @@ async function buildUpstreamHeaders(
   const headers = requestHeaders(options.request.headers);
   const originalUrl = new URL(options.request.url);
   const originalHost = originalUrl.host;
-  const clientIp = firstHeaderValue(
-    options.request.headers.get("x-forwarded-for") ??
-      options.request.headers.get("x-real-ip") ??
-      "",
-  );
 
   if (options.config.preserveHostHeader) {
     headers.set("host", originalHost);
@@ -228,10 +264,6 @@ async function buildUpstreamHeaders(
   headers.set("x-forwarded-proto", originalUrl.protocol.replace(":", ""));
   headers.set("x-forwarded-uri", originalUrl.pathname + originalUrl.search);
   headers.set("x-original-host", originalHost);
-
-  if (clientIp) {
-    headers.set("x-forwarded-for", clientIp);
-  }
 
   if (options.config.originSharedSecret) {
     const timestamp = Math.floor(options.now().getTime() / 1000).toString();
@@ -258,6 +290,53 @@ async function buildUpstreamHeaders(
   }
 
   return headers;
+}
+
+export async function verifyBunnyTunnelSignature(
+  request: Request,
+  secret: string,
+  options: VerifySignatureOptions = {},
+): Promise<boolean> {
+  const version = request.headers.get("x-bunny-tunnel-version");
+  const timestamp = request.headers.get("x-bunny-tunnel-timestamp") ?? "";
+  const bodyHash = request.headers.get("x-bunny-tunnel-body-sha256") ?? "";
+  const signature = request.headers.get("x-bunny-tunnel-signature") ?? "";
+  if (
+    !secret || version !== SIGNATURE_VERSION || !/^\d+$/.test(timestamp) ||
+    !/^[a-f0-9]{64}$/.test(bodyHash) ||
+    !signature.startsWith(`${SIGNATURE_VERSION}=`)
+  ) {
+    return false;
+  }
+
+  const now = options.now ?? (() => new Date());
+  const tolerance = options.toleranceSeconds ?? 300;
+  const timestampSeconds = Number(timestamp);
+  const nowSeconds = Math.floor(now().getTime() / 1000);
+  if (
+    !Number.isSafeInteger(timestampSeconds) || tolerance < 0 ||
+    Math.abs(nowSeconds - timestampSeconds) > tolerance
+  ) {
+    return false;
+  }
+
+  const body = options.body ?? await request.clone().arrayBuffer();
+  if (!timingSafeEqual(await sha256Hex(body), bodyHash)) {
+    return false;
+  }
+
+  const url = new URL(request.url);
+  const payload = [
+    request.method.toUpperCase(),
+    url.pathname + url.search,
+    timestamp,
+    bodyHash,
+  ].join("\n");
+  const expected = `${SIGNATURE_VERSION}=${await hmacSha256Hex(
+    secret,
+    payload,
+  )}`;
+  return timingSafeEqual(signature, expected);
 }
 
 function readRoutes(env: EnvReader): TunnelRoute[] {
@@ -303,6 +382,12 @@ function readRoute(value: unknown): TunnelRoute {
 function normalizeConfig(
   config: RuntimeConfig,
 ): NormalizedConfig {
+  if (config.viewerTokens.length === 0 && !config.allowPublic) {
+    throw new Error(
+      "At least one viewer token is required unless allowPublic is true.",
+    );
+  }
+
   const allowedMethods = config.allowedMethods.length > 0
     ? config.allowedMethods.map((method) => method.toUpperCase())
     : DEFAULT_ALLOWED_METHODS;
@@ -312,7 +397,9 @@ function normalizeConfig(
     allowedMethods,
     deniedPathPrefixes: config.deniedPathPrefixes.map(normalizePath),
     healthPath: normalizePath(config.healthPath),
-    routes: config.routes.map(normalizeRoute).sort((a, b) => {
+    routes: config.routes.map((route) =>
+      normalizeRoute(route, config.allowInsecureOrigin)
+    ).sort((a, b) => {
       const hostScore = Number(Boolean(b.host)) - Number(Boolean(a.host));
       if (hostScore !== 0) {
         return hostScore;
@@ -323,10 +410,22 @@ function normalizeConfig(
   };
 }
 
-function normalizeRoute(route: TunnelRoute): NormalizedRoute {
+function normalizeRoute(
+  route: TunnelRoute,
+  allowInsecureOrigin: boolean,
+): NormalizedRoute {
   const origin = new URL(route.origin);
-  if (origin.protocol !== "https:" && origin.protocol !== "http:") {
+  if (
+    origin.protocol !== "https:" &&
+    !(allowInsecureOrigin && origin.protocol === "http:")
+  ) {
     throw new Error(`Unsupported route origin protocol: ${origin.protocol}`);
+  }
+  if (origin.username || origin.password || origin.hash) {
+    throw new Error("Tunnel origins cannot contain credentials or fragments.");
+  }
+  if (origin.search) {
+    throw new Error("Tunnel origins cannot contain a query string.");
   }
 
   return {
@@ -395,14 +494,7 @@ function isDeniedPath(pathname: string, deniedPrefixes: string[]): boolean {
 
 function isHttpsRequest(request: Request): boolean {
   const url = new URL(request.url);
-  if (url.protocol === "https:") {
-    return true;
-  }
-
-  const forwardedProto = firstHeaderValue(
-    request.headers.get("x-forwarded-proto") ?? "",
-  ).toLowerCase();
-  return forwardedProto === "https";
+  return url.protocol === "https:";
 }
 
 function isViewerAuthorized(request: Request, viewerTokens: string[]): boolean {
@@ -421,10 +513,17 @@ function isViewerAuthorized(request: Request, viewerTokens: string[]): boolean {
 }
 
 function requestHeaders(input: Headers): Headers {
+  const connectionHeaders = connectionHeaderNames(input);
   const headers = new Headers();
   for (const [name, value] of input) {
     const normalized = name.toLowerCase();
-    if (HOP_BY_HOP_HEADERS.has(normalized) || normalized === "content-length") {
+    if (
+      HOP_BY_HOP_HEADERS.has(normalized) || connectionHeaders.has(normalized) ||
+      normalized === "content-length" || normalized === "forwarded" ||
+      normalized.startsWith("x-forwarded-") ||
+      normalized.startsWith("x-original-") ||
+      normalized.startsWith("x-bunny-tunnel-")
+    ) {
       continue;
     }
 
@@ -439,10 +538,13 @@ function requestHeaders(input: Headers): Headers {
 }
 
 function responseHeaders(input: Headers): Headers {
+  const connectionHeaders = connectionHeaderNames(input);
   const headers = new Headers();
   for (const [name, value] of input) {
     const normalized = name.toLowerCase();
-    if (HOP_BY_HOP_HEADERS.has(normalized)) {
+    if (
+      HOP_BY_HOP_HEADERS.has(normalized) || connectionHeaders.has(normalized)
+    ) {
       continue;
     }
 
@@ -454,7 +556,10 @@ function responseHeaders(input: Headers): Headers {
 
 function jsonResponse(value: unknown): Response {
   return new Response(`${JSON.stringify(value)}\n`, {
-    headers: { "content-type": "application/json; charset=utf-8" },
+    headers: {
+      "cache-control": "no-store",
+      "content-type": "application/json; charset=utf-8",
+    },
   });
 }
 
@@ -465,6 +570,7 @@ function textResponse(
 ): Response {
   return new Response(body, {
     headers: {
+      "cache-control": "no-store",
       "content-type": "text/plain; charset=utf-8",
       ...headers,
     },
@@ -484,12 +590,34 @@ function optionalString(value: string | undefined): string | undefined {
 }
 
 function readBoolean(value: string | undefined): boolean {
-  return ["1", "true", "yes", "on"].includes(value?.trim().toLowerCase() ?? "");
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized || ["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  throw new Error(`Invalid boolean value: ${value}`);
 }
 
-function readInteger(value: string | undefined, fallback: number): number {
-  const parsed = Number.parseInt(value ?? "", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+function readInteger(
+  value: string | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+  name: string,
+): number {
+  if (!value || value.trim() === "") {
+    return fallback;
+  }
+  if (!/^\d+$/.test(value.trim())) {
+    throw new Error(`${name} must be an integer.`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) {
+    throw new Error(`${name} must be between ${min} and ${max}.`);
+  }
+  return parsed;
 }
 
 function normalizePath(pathname: string): string {
@@ -511,8 +639,60 @@ function joinPaths(basePath: string, nextPath: string): string {
   return base === "/" ? next : `${base}${next}`;
 }
 
-function firstHeaderValue(value: string): string {
-  return value.split(",")[0]?.trim() ?? "";
+function connectionHeaderNames(headers: Headers): Set<string> {
+  return new Set(
+    (headers.get("connection") ?? "").split(",").map((name) =>
+      name.trim().toLowerCase()
+    ).filter(Boolean),
+  );
+}
+
+function hasAmbiguousEncodedPath(pathname: string): boolean {
+  return /%(?:2f|5c)/i.test(pathname);
+}
+
+async function readRequestBody(
+  request: Request,
+  maxBytes: number,
+): Promise<
+  { kind: "ok"; body: ArrayBuffer | undefined } | { kind: "too-large" }
+> {
+  if (request.method === "GET" || request.method === "HEAD" || !request.body) {
+    return { kind: "ok", body: undefined };
+  }
+
+  const contentLength = request.headers.get("content-length");
+  if (
+    contentLength && /^\d+$/.test(contentLength) &&
+    Number(contentLength) > maxBytes
+  ) {
+    return { kind: "too-large" };
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      return { kind: "too-large" };
+    }
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { kind: "ok", body: body.buffer };
 }
 
 function timingSafeEqual(a: string, b: string): boolean {

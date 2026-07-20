@@ -1,4 +1,5 @@
 import { defaultOptions, scaffoldProject } from "../src/mod.ts";
+import { main } from "../src/main.ts";
 
 function assertIncludes(value: string, expected: string): void {
   if (!value.includes(expected)) {
@@ -14,10 +15,6 @@ Deno.test("dry-run scaffold returns expected Bunny Git files", async () => {
 
   if (!result.files.includes("deno.json")) {
     throw new Error("Missing deno.json");
-  }
-
-  if (!result.files.includes("bunny-sdk.d.ts")) {
-    throw new Error("Missing Bunny Edge Script SDK type shim");
   }
 
   if (result.files.includes(".github/workflows/deploy.yml")) {
@@ -42,7 +39,26 @@ Deno.test("scaffold writes a GitHub Action workflow when requested", async () =>
 
   const denoJson = await Deno.readTextFile(`${directory}/deno.json`);
   assertIncludes(denoJson, "jsr:@zimme/bunny-ddns-edge-script@^1.0.0");
+  assertIncludes(denoJson, "npm:@bunny.net/edgescript-sdk@0.12.1");
 
-  const bunnySdkTypes = await Deno.readTextFile(`${directory}/bunny-sdk.d.ts`);
-  assertIncludes(bunnySdkTypes, 'declare module "@bunny.net/edgescript-sdk"');
+  const gitignore = await Deno.readTextFile(`${directory}/.gitignore`);
+  assertIncludes(gitignore, ".bunny/");
+
+  const workflow = await Deno.readTextFile(
+    `${directory}/.github/workflows/deploy.yml`,
+  );
+  assertIncludes(workflow, "deno install --frozen");
+});
+
+Deno.test("CLI rejects unknown options", async () => {
+  let failed = false;
+  try {
+    await main(["--dry-run", "--unknown"]);
+  } catch (error) {
+    failed = error instanceof Error && error.message.includes("Unknown option");
+  }
+
+  if (!failed) {
+    throw new Error("Expected unknown CLI option to fail");
+  }
 });

@@ -36,7 +36,9 @@ from Bunny's edge unless a future connector package is introduced.
 
 If `TUNNEL_ORIGIN_SHARED_SECRET` is set, the script signs origin requests with
 HMAC headers. The origin must verify those headers and reject unsigned or stale
-requests for the signing layer to provide security.
+requests for the signing layer to provide security. The package exports
+`verifyBunnyTunnelSignature()` for this purpose. Signed requests should be
+accepted only within a short timestamp tolerance to limit replay.
 
 ## Operational Guidance
 
@@ -50,10 +52,13 @@ requests for the signing layer to provide security.
   discovery.
 - Leave `DDNS_MULTI_RECORD_MODE=reject` unless the hostname is intentionally a
   DDNS-managed record set.
-- Use `TUNNEL_VIEWER_TOKEN` or `TUNNEL_VIEWER_TOKENS` when the proxied service
-  should not be public.
+- Keep `TUNNEL_VIEWER_TOKEN` or `TUNNEL_VIEWER_TOKENS` configured unless the
+  proxied service is intentionally public.
+- Leave `TUNNEL_ALLOW_PUBLIC=false` unless public access is intentional.
 - Use `TUNNEL_ORIGIN_SHARED_SECRET` with origin-side verification when the
   origin is publicly reachable.
 - Keep `TUNNEL_ALLOW_INSECURE_HTTP=false` in Bunny.
+- Keep `TUNNEL_ALLOW_INSECURE_ORIGIN=false`; use HTTPS to the origin.
+- Keep `TUNNEL_MAX_BODY_BYTES` no larger than the origin actually needs.
 - Keep origin secrets and viewer tokens in Bunny Edge Script Env Configuration,
   not in source control.

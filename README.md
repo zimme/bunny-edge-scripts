@@ -1,7 +1,7 @@
 # bunny-edge-scripts
 
-A Deno-first package for building a secure DynDNS-compatible update endpoint on
-bunny.net Edge Scripting, published to JSR and npm.
+A Deno-first monorepo for secure bunny.net Edge Script building blocks,
+published to JSR and npm.
 
 Install it in your own Bunny Edge Script Git repository, connect that repository
 to a Standalone Edge Script, and your inadyn/router/NAS clients can update Bunny
@@ -41,7 +41,7 @@ script file for deploy paths that upload a single script.
 To create a personal deployment repo, use the scaffold generator:
 
 ```sh
-deno run -A jsr:@zimme/create-bunny-ddns
+deno create jsr:@zimme/create-bunny-ddns my-bunny-ddns
 ```
 
 The npm compatibility entrypoint also works:
@@ -56,9 +56,10 @@ With npm's initializer shorthand, the generator is also available as:
 npm init @zimme/bunny-ddns
 ```
 
-The generator asks for non-secret setup choices and writes instructions for
-adding runtime secrets in Bunny Edge Scripting. It does not write your Bunny API
-key, DDNS shared secret, deploy key, or other credentials into generated files.
+The generator asks for non-secret setup choices, resolves dependencies, creates
+a `deno.lock`, and writes instructions for adding runtime secrets in Bunny Edge
+Scripting. It does not write your Bunny API key, DDNS shared secret, deploy key,
+or other credentials into generated files.
 
 ## Manual Install
 
@@ -100,11 +101,11 @@ minimal repo shape.
 Bunny's Git integration supports install, build, and entry-file settings. A good
 setup for a repo using this package is:
 
-| Setting         | Value                 |
-| --------------- | --------------------- |
-| Install command | `deno install`        |
-| Build command   | `deno task build`     |
-| Entry file      | `generated/script.ts` |
+| Setting         | Value                   |
+| --------------- | ----------------------- |
+| Install command | `deno install --frozen` |
+| Build command   | `deno task build`       |
+| Entry file      | `generated/script.ts`   |
 
 If your script is already self-contained, Bunny can deploy `script.ts` directly
 and you can skip the bundle step entirely. The package-based setup in this repo
@@ -139,6 +140,18 @@ If you prefer manual editor deployment, build the same file and paste
 `generated/script.ts` into Bunny's script editor. The generated file is a deploy
 artifact, not the place to maintain your source.
 
+The official bunny.net CLI can also link a local deployment repo, deploy the
+built bundle, and manage variables and secrets directly in Bunny:
+
+```sh
+bunny login
+bunny scripts link
+deno task build
+bunny scripts deploy generated/script.ts
+```
+
+Keep the CLI's local `.bunny/` directory out of source control.
+
 ## What It Provides
 
 ### DDNS
@@ -159,12 +172,14 @@ artifact, not the place to maintain your source.
 `@zimme/bunny-tunnel-edge-script` provides the Bunny Edge Script side of an HTTP
 access gateway:
 
-- Route public edge requests to one or more configured HTTP origins.
-- Require HTTPS by default.
-- Optionally require viewer `Authorization: Bearer <token>`.
+- Route edge requests to one or more configured HTTPS origins.
+- Require HTTPS for viewers and origins by default.
+- Require viewer `Authorization: Bearer <token>` unless public access is
+  explicitly enabled.
 - Optionally sign every origin request with `TUNNEL_ORIGIN_SHARED_SECRET` so the
   origin can reject traffic that did not pass through your Bunny script.
 - Strip hop-by-hop headers and viewer `Authorization` before origin forwarding.
+- Bound buffered request bodies to 10 MiB by default.
 - Add forwarding metadata such as `x-forwarded-host`, `x-forwarded-proto`, and
   `x-forwarded-uri`.
 - Serve a local health check at `/__bunny_tunnel/healthz`.
@@ -286,6 +301,7 @@ secrets for sensitive values.
 | `DDNS_TTL`                 | No       | Default `900`. TTL used for records created by the script.                                                                                             |
 | `DDNS_MULTI_RECORD_MODE`   | No       | Default `reject`. Set `update-all` to update every matching record with the same hostname/type.                                                        |
 | `DDNS_MAX_HOSTNAMES`       | No       | Default `25`. Maximum hostnames accepted in one update request.                                                                                        |
+| `DDNS_MAX_MUTATIONS`       | No       | Default and maximum `40`. Rejects requests that could exceed Bunny's per-request subrequest budget.                                                    |
 | `DDNS_RECORD_COMMENT`      | No       | Comment used for newly created DNS records.                                                                                                            |
 | `DDNS_ALLOW_INSECURE_HTTP` | No       | Default `false`. Set `true` only for local development.                                                                                                |
 | `DDNS_API_BASE_URL`        | No       | Default `https://api.bunny.net`. Mostly useful for tests.                                                                                              |
@@ -354,12 +370,15 @@ This project uses Compatible Versioning (ComVer). Releases are published as
 `X.Y.0`: compatible changes increment `Y`, incompatible changes increment `X`,
 and patch releases are intentionally not used.
 
+See [RELEASING.md](RELEASING.md) for the OIDC trusted-publishing setup and
+release checklist.
+
 ## Local Development
 
 For this package repository:
 
 ```sh
-deno install
+deno ci
 deno task fmt
 deno task spellcheck
 deno task lint
@@ -368,6 +387,9 @@ deno task test
 deno task build
 npm pack --dry-run
 ```
+
+Use `deno install` when intentionally updating dependencies and `deno ci` for a
+frozen install from the committed lockfile.
 
 The full local verification command is:
 
@@ -394,6 +416,8 @@ artifact.
 - Multiple existing records for the same hostname and IP family are rejected by
   default. This avoids accidentally flattening a Bunny DNS weighted or smart
   record set into one dynamic address.
+- Mutation requests are preflighted against Bunny Edge Scripting's 50 subrequest
+  limit before any DNS record is changed.
 
 This project does not implement DNS TXT proof by default. The script already has
 the Bunny API key, so a TXT-token flow adds setup work without meaningfully
@@ -403,9 +427,12 @@ with different secrets.
 
 ## References
 
-- [bunny.net Edge Scripting overview](https://docs.bunny.net/docs/edge-scripting-overview)
-- [bunny.net Edge Scripting environment variables and secrets](https://docs.bunny.net/docs/edge-scripting-environment-variables-and-secrets)
-- [bunny.net GitHub Action deployment](https://docs.bunny.net/docs/edge-scripting-github-action)
+- [bunny.net Edge Scripting overview](https://docs.bunny.net/scripting)
+- [bunny.net GitHub integration](https://docs.bunny.net/scripting/github-integration)
+- [bunny.net Edge Script secrets](https://docs.bunny.net/scripting/secrets)
+- [bunny.net Edge Script limits](https://docs.bunny.net/scripting/limits)
+- [bunny.net CLI for Edge Scripts](https://bunny.net/blog/build-and-deploy-scripts-at-the-edge-with-the-bunny-net-cli/)
+- [Deno create templates](https://docs.deno.com/runtime/reference/cli/create/)
 - [bunny.net DNS Zone API](https://docs.bunny.net/api-reference/core/dns-zone/list-dns-zones)
 - [inadyn custom DDNS providers](https://github.com/troglobit/inadyn)
 

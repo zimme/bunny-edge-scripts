@@ -8,7 +8,8 @@
   "homepage": "https://github.com/zimme/bunny-edge-scripts#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zimme/bunny-edge-scripts.git"
+    "url": "git+https://github.com/zimme/bunny-edge-scripts.git",
+    "directory": "packages/bunny-ddns-edge-script"
   },
   "bugs": {
     "url": "https://github.com/zimme/bunny-edge-scripts/issues"
@@ -32,7 +33,6 @@
   "files": [
     "dist/app.d.ts",
     "dist/app.js",
-    "dist/app.js.d.ts",
     "dist/mod.d.ts",
     "dist/mod.js",
     "README.md",
