@@ -24,9 +24,10 @@ the client's behalf.
 - Preserve secure defaults. HTTPS-only, Basic Auth only, no query-string
   credentials, deny-over-allow, and fail-safe multi-record handling are
   intentional.
-- Preserve secure tunnel defaults. HTTPS-only, stripped hop-by-hop headers,
-  stripped viewer authorization, deny-first path filtering, and optional signed
-  origin forwarding are intentional for tunnel work.
+- Preserve secure tunnel defaults. HTTPS-only viewers and origins, bounded
+  request bodies, stripped hop-by-hop, authorization, and spoofable forwarding
+  headers, deny-first path filtering, and optional signed origin forwarding are
+  intentional for tunnel work.
 - Keep Bunny deployment simple. Consumer repos should need only a tiny
   `script.ts` entrypoint that imports this package.
 - Do not edit `dist/` directly. Edit `src/`, then run `deno task build` or let
@@ -40,6 +41,7 @@ the client's behalf.
 
 ```sh
 deno install
+deno ci
 deno task fmt
 deno task spellcheck
 deno task lint
@@ -62,6 +64,8 @@ deno task ci
 - `packages/create-bunny-ddns/src/main.ts` is the scaffold CLI.
 - `packages/*/dist/` are generated local npm package artifact directories.
 - `scripts/build_npm_package.ts` owns npm package artifact builds.
+- `scripts/verify_release_version.ts` prevents release tags from publishing
+  mismatched package versions.
 - `examples/edge-script-repo` shows the user-owned Bunny Edge Script repo shape.
 - `examples/tunnel-edge-script-repo` shows the user-owned Bunny Tunnel Edge
   Script repo shape.

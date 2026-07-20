@@ -2,6 +2,9 @@
 
 These are project-local skills for AI agents working in this repo.
 
+Use `deno ci` before the task suite when validating a clean checkout. The
+committed lockfile is part of the repository's supply-chain controls.
+
 ## Change DDNS Behavior
 
 Use when modifying request parsing, response codes, authentication, IP handling,

@@ -33,10 +33,9 @@
   "files": [
     "dist/app.d.ts",
     "dist/app.js",
-    "dist/bunny-sdk.d.ts",
-    "dist/main.js",
     "dist/mod.d.ts",
     "dist/mod.js",
+    ".env.example",
     "README.md",
     "LICENSE"
   ],

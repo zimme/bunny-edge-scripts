@@ -8,3 +8,7 @@ updates:
     directory: "/examples/edge-script-repo"
     schedule:
       interval: "weekly"
+  - package-ecosystem: "github-actions"
+    directory: "/examples/tunnel-edge-script-repo"
+    schedule:
+      interval: "weekly"

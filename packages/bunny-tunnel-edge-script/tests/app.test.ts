@@ -3,6 +3,7 @@ import {
   type Fetcher,
   readBunnyTunnelConfigFromEnv,
   type RuntimeConfig,
+  verifyBunnyTunnelSignature,
 } from "../src/app.ts";
 
 function assertEquals<T>(actual: T, expected: T): void {
@@ -25,10 +26,13 @@ function assert(value: unknown, message: string): asserts value {
 
 function config(overrides: Partial<RuntimeConfig> = {}): RuntimeConfig {
   return {
+    allowPublic: true,
     allowInsecureHttp: false,
+    allowInsecureOrigin: false,
     allowedMethods: ["GET", "POST"],
     deniedPathPrefixes: [],
     healthPath: "/__bunny_tunnel/healthz",
+    maxBodyBytes: 10 * 1024 * 1024,
     preserveHostHeader: false,
     requestTimeoutMs: 30000,
     routes: [{ origin: "https://origin.example/base" }],
@@ -45,6 +49,7 @@ Deno.test("reads single-origin configuration from environment", () => {
     ["TUNNEL_ALLOWED_METHODS", "GET,POST"],
     ["TUNNEL_DENIED_PATH_PREFIXES", "/admin,/private"],
     ["TUNNEL_ORIGIN_SHARED_SECRET", "origin-secret"],
+    ["TUNNEL_MAX_BODY_BYTES", "4096"],
   ]);
 
   const parsed = readBunnyTunnelConfigFromEnv({
@@ -54,12 +59,29 @@ Deno.test("reads single-origin configuration from environment", () => {
   });
 
   assertEquals(parsed.routes.length, 1);
+  assertEquals(parsed.allowPublic, false);
   assertEquals(parsed.routes[0].origin, "https://origin.example");
   assertEquals(parsed.routes[0].host, "app.example.com");
   assertEquals(parsed.viewerTokens.length, 2);
   assertEquals(parsed.allowedMethods.join(","), "GET,POST");
   assertEquals(parsed.deniedPathPrefixes.join(","), "/admin,/private");
   assertEquals(parsed.originSharedSecret, "origin-secret");
+  assertEquals(parsed.maxBodyBytes, 4096);
+});
+
+Deno.test("requires viewer auth unless public access is explicit", () => {
+  let failed = false;
+  try {
+    readBunnyTunnelConfigFromEnv({
+      get(name) {
+        return name === "TUNNEL_ORIGIN" ? "https://origin.example" : undefined;
+      },
+    });
+  } catch (error) {
+    failed = error instanceof Error && error.message.includes("VIEWER_TOKEN");
+  }
+
+  assert(failed, "Expected implicit public access to fail");
 });
 
 Deno.test("requires at least one configured origin", () => {
@@ -72,6 +94,26 @@ Deno.test("requires at least one configured origin", () => {
   }
 
   assert(failed, "Expected missing origin configuration to fail");
+});
+
+Deno.test("rejects invalid tunnel limits", () => {
+  let failed = false;
+  try {
+    readBunnyTunnelConfigFromEnv({
+      get(name) {
+        const values: Record<string, string> = {
+          TUNNEL_ORIGIN: "https://origin.example",
+          TUNNEL_VIEWER_TOKEN: "secret",
+          TUNNEL_MAX_BODY_BYTES: "999999999",
+        };
+        return values[name];
+      },
+    });
+  } catch (error) {
+    failed = error instanceof Error && error.message.includes("MAX_BODY_BYTES");
+  }
+
+  assert(failed, "Expected an unsafe body limit to fail");
 });
 
 Deno.test("proxies matching requests to the configured origin", async () => {
@@ -113,6 +155,36 @@ Deno.test("proxies matching requests to the configured origin", async () => {
   assertEquals(upstreamRequest.headers.get("x-forwarded-host"), "edge.example");
 });
 
+Deno.test("strips spoofable forwarding and tunnel signature headers", async () => {
+  let upstreamRequest: Request | undefined;
+  const handler = createBunnyTunnelHandler({
+    config: config(),
+    fetcher: (input, init) => {
+      upstreamRequest = input instanceof Request
+        ? input
+        : new Request(input, init);
+      return Promise.resolve(new Response("ok"));
+    },
+  });
+
+  await handler(
+    new Request("https://edge.example/", {
+      headers: {
+        "x-bunny-tunnel-signature": "v1=forged",
+        "x-forwarded-for": "127.0.0.1",
+        "x-forwarded-port": "1234",
+        "x-original-url": "/admin",
+      },
+    }),
+  );
+
+  assert(upstreamRequest, "Expected upstream request");
+  assertEquals(upstreamRequest.headers.get("x-bunny-tunnel-signature"), null);
+  assertEquals(upstreamRequest.headers.get("x-forwarded-for"), null);
+  assertEquals(upstreamRequest.headers.get("x-forwarded-port"), null);
+  assertEquals(upstreamRequest.headers.get("x-original-url"), null);
+});
+
 Deno.test("chooses host and path specific routes before generic routes", async () => {
   let proxiedUrl = "";
   const handler = createBunnyTunnelHandler({
@@ -147,6 +219,30 @@ Deno.test("requires HTTPS by default", async () => {
 
   assertEquals(response.status, 400);
   assertIncludes(await response.text(), "HTTPS required");
+});
+
+Deno.test("does not trust forwarded headers as proof of HTTPS", async () => {
+  const handler = createBunnyTunnelHandler({ config: config() });
+  const response = await handler(
+    new Request("http://edge.example/", {
+      headers: { "x-forwarded-proto": "https" },
+    }),
+  );
+
+  assertEquals(response.status, 400);
+});
+
+Deno.test("requires HTTPS origins unless explicitly enabled", () => {
+  let failed = false;
+  try {
+    createBunnyTunnelHandler({
+      config: config({ routes: [{ origin: "http://origin.example" }] }),
+    });
+  } catch {
+    failed = true;
+  }
+
+  assert(failed, "Expected insecure origin configuration to fail");
 });
 
 Deno.test("rejects requests without required viewer bearer token", async () => {
@@ -203,6 +299,35 @@ Deno.test("blocks denied path prefixes before proxying", async () => {
   assertEquals(called, false);
 });
 
+Deno.test("rejects encoded path separators", async () => {
+  const handler = createBunnyTunnelHandler({ config: config() });
+  const response = await handler(
+    new Request("https://edge.example/admin%2Fsettings"),
+  );
+
+  assertEquals(response.status, 400);
+});
+
+Deno.test("rejects request bodies over the configured limit", async () => {
+  let called = false;
+  const handler = createBunnyTunnelHandler({
+    config: config({ maxBodyBytes: 4 }),
+    fetcher: () => {
+      called = true;
+      return Promise.resolve(new Response("unexpected"));
+    },
+  });
+  const response = await handler(
+    new Request("https://edge.example/", {
+      body: "hello",
+      method: "POST",
+    }),
+  );
+
+  assertEquals(response.status, 413);
+  assertEquals(called, false);
+});
+
 Deno.test("signs upstream requests when an origin shared secret is configured", async () => {
   let upstreamRequest: Request | undefined;
   const handler = createBunnyTunnelHandler({
@@ -237,6 +362,18 @@ Deno.test("signs upstream requests when an origin shared secret is configured", 
     upstreamRequest.headers.get("x-bunny-tunnel-signature") ?? "",
     "v1=",
   );
+  assertEquals(
+    await verifyBunnyTunnelSignature(upstreamRequest, "origin-secret", {
+      now: () => new Date("2026-06-26T12:00:00Z"),
+    }),
+    true,
+  );
+  assertEquals(
+    await verifyBunnyTunnelSignature(upstreamRequest, "wrong-secret", {
+      now: () => new Date("2026-06-26T12:00:00Z"),
+    }),
+    false,
+  );
 });
 
 Deno.test("serves a local health endpoint without proxying", async () => {
@@ -256,4 +393,13 @@ Deno.test("serves a local health endpoint without proxying", async () => {
   assertEquals(response.status, 200);
   assertEquals(called, false);
   assertIncludes(await response.text(), "bunny-tunnel-edge-script");
+});
+
+Deno.test("health checks still require HTTPS by default", async () => {
+  const handler = createBunnyTunnelHandler({ config: config() });
+  const response = await handler(
+    new Request("http://edge.example/__bunny_tunnel/healthz"),
+  );
+
+  assertEquals(response.status, 400);
 });

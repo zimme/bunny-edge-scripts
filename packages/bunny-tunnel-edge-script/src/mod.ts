@@ -1,6 +1,7 @@
 export {
   createBunnyTunnelHandler,
   readBunnyTunnelConfigFromEnv,
+  verifyBunnyTunnelSignature,
 } from "./app.ts";
 
 export type {
@@ -9,4 +10,5 @@ export type {
   HandlerOptions,
   RuntimeConfig,
   TunnelRoute,
+  VerifySignatureOptions,
 } from "./app.ts";

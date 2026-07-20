@@ -54,6 +54,7 @@
  * @property {boolean} allowInsecureHttp
  * @property {MultiRecordMode} multiRecordMode
  * @property {number} maxHostnames
+ * @property {number} maxMutations
  * @property {string} managedComment
  */
 /**
@@ -325,6 +326,7 @@ export type RuntimeConfig = {
   allowInsecureHttp: boolean;
   multiRecordMode: MultiRecordMode;
   maxHostnames: number;
+  maxMutations: number;
   managedComment: string;
 };
 export type EnvReader = {

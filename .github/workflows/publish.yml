@@ -14,21 +14,26 @@ jobs:
       id-token: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Setup Deno
-        uses: denoland/setup-deno@v2
+        uses: denoland/setup-deno@b7351df727350dca84cb9d725d57dcf5bc82ba26 # v2
         with:
           deno-version: v2.x
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
-        run: deno install
+        run: deno ci
+
+      - name: Verify release version
+        run: deno task release:check
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
 
       - name: Verify package
         run: deno task ci
@@ -43,16 +48,10 @@ jobs:
         run: deno publish --config packages/create-bunny-ddns/deno.json
 
       - name: Publish bunny-ddns-edge-script to npm
-        run: npm publish --provenance --workspace @zimme/bunny-ddns-edge-script
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --workspace @zimme/bunny-ddns-edge-script
 
       - name: Publish bunny-tunnel-edge-script to npm
-        run: npm publish --provenance --workspace @zimme/bunny-tunnel-edge-script
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --workspace @zimme/bunny-tunnel-edge-script
 
       - name: Publish generator to npm
-        run: npm publish --provenance --workspace @zimme/create-bunny-ddns
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --workspace @zimme/create-bunny-ddns

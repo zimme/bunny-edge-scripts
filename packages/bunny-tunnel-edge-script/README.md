@@ -29,3 +29,35 @@ that did not pass through the edge script.
 
 It is not a full private connector daemon yet. If the origin is not publicly
 reachable from Bunny's edge, a future connector package would still be needed.
+
+## Configuration
+
+- `TUNNEL_ORIGIN`: required single HTTPS origin.
+- `TUNNEL_ROUTES`: optional JSON route array instead of a single origin.
+- `TUNNEL_VIEWER_TOKEN` or `TUNNEL_VIEWER_TOKENS`: viewer bearer tokens. At
+  least one is required by default.
+- `TUNNEL_ALLOW_PUBLIC`: explicitly allows unauthenticated viewers. Default
+  `false`.
+- `TUNNEL_ORIGIN_SHARED_SECRET`: optional HMAC signing secret.
+- `TUNNEL_ALLOWED_METHODS`: allowed HTTP methods.
+- `TUNNEL_DENIED_PATH_PREFIXES`: path prefixes that always return 404.
+- `TUNNEL_MAX_BODY_BYTES`: default 10 MiB; maximum 32 MiB.
+- `TUNNEL_REQUEST_TIMEOUT_MS`: default 30 seconds.
+- `TUNNEL_ALLOW_INSECURE_HTTP`: permits HTTP viewers for local testing.
+- `TUNNEL_ALLOW_INSECURE_ORIGIN`: permits an HTTP origin when explicitly
+  enabled.
+
+## Verify Origin Signatures
+
+At the origin, verify the request before consuming its body:
+
+```ts
+import { verifyBunnyTunnelSignature } from "@zimme/bunny-tunnel-edge-script";
+
+if (!await verifyBunnyTunnelSignature(request, originSharedSecret)) {
+  return new Response("unauthorized", { status: 401 });
+}
+```
+
+The verifier checks the HMAC, body digest, and a five-minute timestamp window by
+default. The origin must reject unsigned requests for signing to add security.

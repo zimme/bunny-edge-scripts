@@ -59,6 +59,7 @@ function config(overrides: Partial<RuntimeConfig> = {}): RuntimeConfig {
     allowInsecureHttp: false,
     multiRecordMode: "reject",
     maxHostnames: 25,
+    maxMutations: 40,
     managedComment: "Managed by test",
     ...overrides,
   };
@@ -177,6 +178,7 @@ Deno.test("reads required and optional configuration from environment values", (
     ["DDNS_TTL", "300"],
     ["DDNS_MULTI_RECORD_MODE", "update-all"],
     ["DDNS_MAX_HOSTNAMES", "5"],
+    ["DDNS_MAX_MUTATIONS", "8"],
     ["DDNS_RECORD_COMMENT", "Managed by test"],
   ]);
 
@@ -197,6 +199,7 @@ Deno.test("reads required and optional configuration from environment values", (
   assertEqual(parsed.defaultTtl, 300);
   assertEqual(parsed.multiRecordMode, "update-all");
   assertEqual(parsed.maxHostnames, 5);
+  assertEqual(parsed.maxMutations, 8);
   assertEqual(parsed.managedComment, "Managed by test");
 });
 
@@ -213,6 +216,34 @@ Deno.test("requires Bunny API and DDNS secrets in configuration", () => {
     readConfigFromEnv({
       get(name: string) {
         return name === "BUNNY_API_KEY" ? "account-api-key" : undefined;
+      },
+    })
+  );
+});
+
+Deno.test("rejects invalid security configuration instead of failing open", () => {
+  assertThrows(() =>
+    readConfigFromEnv({
+      get(name: string) {
+        const values: Record<string, string> = {
+          BUNNY_API_KEY: "account-api-key",
+          DDNS_SHARED_SECRET: "secret",
+          DDNS_AUTO_CREATE: "flase",
+        };
+        return values[name];
+      },
+    })
+  );
+
+  assertThrows(() =>
+    readConfigFromEnv({
+      get(name: string) {
+        const values: Record<string, string> = {
+          BUNNY_API_KEY: "account-api-key",
+          DDNS_SHARED_SECRET: "secret",
+          DDNS_MAX_MUTATIONS: "41",
+        };
+        return values[name];
       },
     })
   );
@@ -685,7 +716,7 @@ Deno.test("requires HTTPS unless local insecure mode is enabled", async () => {
   assertEqual(await response.text(), "badagent\n");
 });
 
-Deno.test("only trusts the first forwarded hop when checking HTTPS", async () => {
+Deno.test("does not trust forwarded headers as proof of HTTPS", async () => {
   const handler = createHandler({
     config: config(),
     fetcher: makeFetch([]),
@@ -697,8 +728,7 @@ Deno.test("only trusts the first forwarded hop when checking HTTPS", async () =>
       {
         headers: {
           Authorization: auth(),
-          forwarded:
-            "for=198.51.100.10;proto=http, for=203.0.113.1;proto=https",
+          "x-forwarded-proto": "https",
         },
       },
     ),
@@ -706,6 +736,42 @@ Deno.test("only trusts the first forwarded hop when checking HTTPS", async () =>
 
   assertEqual(response.status, 400);
   assertEqual(await response.text(), "badagent\n");
+});
+
+Deno.test("rejects duplicate address parameters", async () => {
+  const handler = createHandler({
+    config: config(),
+    fetcher: makeFetch([]),
+  });
+
+  const response = await handler(
+    makeRequest(
+      "/nic/update?hostname=home.example.com&myip=203.0.113.9&myip=203.0.113.10",
+    ),
+  );
+
+  assertEqual(await response.text(), "badip\n");
+});
+
+Deno.test("rejects requests that exceed the mutation budget before writing", async () => {
+  const events: Array<{ method: string; path: string; body?: unknown }> = [];
+  const handler = createHandler({
+    config: config({ maxMutations: 1 }),
+    fetcher: makeFetch([{
+      Id: 1,
+      Domain: "example.com",
+      Records: [],
+    }], events),
+  });
+
+  const response = await handler(
+    makeRequest(
+      "/nic/update?hostname=one.example.com,two.example.com&myip=203.0.113.9",
+    ),
+  );
+
+  assertEqual(await response.text(), "numhost\n");
+  assertDeepEqual(events.map((event) => event.method), ["GET"]);
 });
 
 Deno.test("rejects query-string credentials", async () => {

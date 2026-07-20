@@ -8,6 +8,7 @@
     ".npm-cache",
     "dist",
     "examples/edge-script-repo/generated",
+    "examples/tunnel-edge-script-repo/generated",
     "node_modules",
     "package-lock.json"
   ],
@@ -35,6 +36,7 @@
     "DynDNS",
     "edgescript",
     "EnviromentalVariables",
+    "flase",
     "healthz",
     "HMAC",
     "hostnames",
@@ -46,6 +48,10 @@
     "nohost",
     "notfqdn",
     "numhost",
+    "lockfiles",
+    "preflighted",
+    "spoofable",
+    "subrequest",
     "tailscale",
     "zimme"
   ]

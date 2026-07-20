@@ -7,6 +7,10 @@
     "packages/bunny-tunnel-edge-script",
     "packages/create-bunny-ddns"
   ],
+  "devDependencies": {
+    "cspell": "8.19.4",
+    "typescript": "6.0.3"
+  },
   "scripts": {
     "build": "deno task build",
     "ci": "deno task ci",
