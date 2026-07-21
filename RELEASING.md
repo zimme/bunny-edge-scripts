@@ -21,10 +21,10 @@ OIDC, and npm and JSR attach provenance to public package publications.
 ## Release
 
 1. Update all six package version fields to the same ComVer version.
-2. Update `CHANGELOG.md` and run `deno task ci`.
-3. Run `RELEASE_TAG=vX.Y.0 deno task release:check`.
+2. Update `CHANGELOG.md` and run `npm run validate` in the Dev Container.
+3. Run `RELEASE_TAG=vX.Y.0 deno task release:check` inside the Dev Container.
 4. Commit, tag `vX.Y.0`, push the tag, and publish the matching GitHub release.
 5. Verify all three packages on both JSR and npm.
 
-The workflow refuses to publish when the release tag and package versions do not
-match.
+The thin workflow runs `npm run release` in the same Dev Container used by CI.
+It refuses to publish when the release tag and package versions do not match.

@@ -4,11 +4,9 @@ Describe the behavior change and why it is needed.
 
 ## Verification
 
-- [ ] `deno task ci`
-- [ ] `deno task build`
-- [ ] `deno publish --dry-run` passes for changed JSR packages
-- [ ] `npm pack --dry-run` contains the expected generated `dist/` files, when
-      source changed
+- [ ] `npm run validate` passes in the Dev Container
+- [ ] Tests cover behavior changes
+- [ ] Documentation covers user-facing changes
 
 ## Security Notes
 

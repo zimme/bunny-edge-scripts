@@ -1,0 +1,21 @@
+name: bunny-edge-scripts
+
+services:
+  workspace:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+      args:
+        DENO_VERSION: "2.9.3"
+    command: sleep infinity
+    environment:
+      DENO_DIR: /deno-dir
+      DENO_NO_PROMPT: "1"
+      DENO_NO_UPDATE_CHECK: "1"
+    init: true
+    volumes:
+      - ..:/workspaces/bunny-edge-scripts:cached
+      - deno-cache:/deno-dir
+
+volumes:
+  deno-cache:

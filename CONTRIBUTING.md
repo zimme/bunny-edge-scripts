@@ -4,30 +4,36 @@ Thanks for helping keep this small and useful.
 
 ## Development
 
-```sh
-deno install
-deno task fmt
-deno task spellcheck
-deno task lint
-deno task check
-deno task test
-deno task build
-```
-
-Run the full CI set locally with:
+Use the repository's Docker Compose-backed Dev Container. In VS Code or
+Codespaces, reopen the repository in the container. From a host with Docker,
+Node, and npm:
 
 ```sh
-deno task ci
+npm run devcontainer:up
+npm run devcontainer:exec -- npm run validate
+npm run devcontainer:down
 ```
+
+Once inside the container:
+
+```sh
+npm run setup
+npm run fmt
+npm run test
+npm run validate
+```
+
+`npm run validate` is exactly what CI runs. The Compose definition is the place
+to add any future service dependency needed by tests or development.
 
 Package `dist/` directories are generated from package `src/` directories and
 are gitignored. Do not edit them by hand. Change source files, run
 `deno task build` for a local package build, and rely on `prepack` scripts to
 refresh `dist/` during `npm pack` and `npm publish`.
 
-The npm CLI is used only at the package-publication boundary. Dependency
-installation, formatting, linting, type-checking, testing, and bundling are Deno
-tasks.
+The npm scripts are the stable command interface for developers and automation;
+they delegate dependency installation, formatting, linting, typechecking,
+testing, and bundling to Deno tasks.
 
 ## Public API
 

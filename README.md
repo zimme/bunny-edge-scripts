@@ -375,27 +375,44 @@ release checklist.
 
 ## Local Development
 
-For this package repository:
+The supported development environment is the Docker Compose-backed Dev Container
+in `.devcontainer/`. Open the repository in VS Code Dev Containers, GitHub
+Codespaces, or start it from a host with Docker, Node, and npm. The bootstrap
+command downloads the exact Dev Container CLI version when it is not already
+installed in the repository:
 
 ```sh
-deno ci
-deno task fmt
-deno task spellcheck
-deno task lint
-deno task check
-deno task test
-deno task build
-npm pack --dry-run
+npm run devcontainer:up
+npm run devcontainer:exec -- npm run validate
+npm run devcontainer:down
 ```
 
-Use `deno install` when intentionally updating dependencies and `deno ci` for a
-frozen install from the committed lockfile.
+The container pins Deno, Node, npm, GitHub CLI, and GitHub Copilot CLI versions.
+Its Dev Container Features are also pinned by
+`.devcontainer/devcontainer-lock.json`. Docker Compose currently starts only the
+workspace service because the project has no database, queue, or other required
+service. Add future dependencies as Compose services so local development and CI
+continue to use the same topology.
 
-The full local verification command is:
+Inside the container, the normal commands are:
 
 ```sh
-deno task ci
+npm run setup
+npm run doctor
+npm run fmt
+npm run test
+npm run validate
 ```
+
+`npm run validate` is the complete check used by CI. It verifies the pinned
+toolchain, performs a frozen dependency install, and runs formatting, spelling,
+linting, typechecking, tests, builds, smoke checks, dependency audit, and
+JSR/npm publication dry-runs. GitHub Actions sets `CI=true`; no separate CI-only
+script is maintained.
+
+Host-side Deno commands remain available as a fallback. Use `deno install` when
+intentionally updating dependencies and `deno ci` for a frozen install from the
+committed lockfile.
 
 `dist/` is generated package output and is gitignored. `deno task build` or the
 package `prepack` step refreshes it locally when you need to verify or publish
@@ -433,6 +450,9 @@ with different secrets.
 - [bunny.net Edge Script limits](https://docs.bunny.net/scripting/limits)
 - [bunny.net CLI for Edge Scripts](https://bunny.net/blog/build-and-deploy-scripts-at-the-edge-with-the-bunny-net-cli/)
 - [Deno create templates](https://docs.deno.com/runtime/reference/cli/create/)
+- [Development Containers](https://containers.dev/)
+- [Dev Containers in CI](https://github.com/devcontainers/ci)
+- [GitHub Copilot coding-agent environment setup](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/customize-the-agent-environment)
 - [bunny.net DNS Zone API](https://docs.bunny.net/api-reference/core/dns-zone/list-dns-zones)
 - [inadyn custom DDNS providers](https://github.com/troglobit/inadyn)
 

@@ -2,22 +2,31 @@
   "name": "bunny-edge-scripts-monorepo",
   "private": true,
   "type": "module",
+  "packageManager": "npm@11.8.0",
   "workspaces": [
     "packages/bunny-ddns-edge-script",
     "packages/bunny-tunnel-edge-script",
     "packages/create-bunny-ddns"
   ],
   "devDependencies": {
+    "@devcontainers/cli": "0.87.0",
     "cspell": "8.19.4",
     "typescript": "6.0.3"
   },
   "scripts": {
     "build": "deno task build",
-    "ci": "deno task ci",
+    "ci": "deno ci && deno task ci",
+    "devcontainer:down": "docker compose -f .devcontainer/compose.yaml down",
+    "devcontainer:exec": "npm exec --yes --package=@devcontainers/cli@0.87.0 -- devcontainer exec --workspace-folder .",
+    "devcontainer:up": "npm exec --yes --package=@devcontainers/cli@0.87.0 -- devcontainer up --workspace-folder . --frozen-lockfile",
+    "doctor": "deno task doctor",
     "fmt": "deno task fmt",
     "lint": "deno task lint",
+    "release": "deno task release:check && npm run ci && deno task publish",
+    "setup": "deno install --frozen",
     "spellcheck": "deno task spellcheck",
     "test": "deno task test",
-    "typecheck": "deno task check"
+    "typecheck": "deno task check",
+    "validate": "npm run doctor && npm run ci"
   }
 }
