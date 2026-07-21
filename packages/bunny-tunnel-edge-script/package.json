@@ -1,6 +1,6 @@
 {
   "name": "@zimme/bunny-tunnel-edge-script",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Secure edge reverse proxy and origin gateway for bunny.net Edge Scripts.",
   "type": "module",
   "license": "MIT",
