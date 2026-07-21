@@ -48,6 +48,10 @@ export async function scaffoldProject(
     await ensureWritableDirectory(directory, options.force);
 
     for (const file of files) {
+      await rejectSymlinkedOutput(directory, file.path);
+    }
+
+    for (const file of files) {
       const path = joinPath(directory, file.path);
       await Deno.mkdir(dirname(path), { recursive: true });
       await Deno.writeTextFile(path, file.content);
@@ -318,6 +322,11 @@ async function ensureWritableDirectory(
   force: boolean,
 ): Promise<void> {
   try {
+    const info = await Deno.lstat(directory);
+    if (info.isSymlink) {
+      throw new Error(`Target directory "${directory}" cannot be a symlink.`);
+    }
+
     const entries = [];
     for await (const entry of Deno.readDir(directory)) {
       entries.push(entry);
@@ -335,6 +344,29 @@ async function ensureWritableDirectory(
     }
 
     throw error;
+  }
+}
+
+async function rejectSymlinkedOutput(
+  directory: string,
+  relativePath: string,
+): Promise<void> {
+  let currentPath = directory;
+  for (const part of relativePath.split("/")) {
+    currentPath = joinPath(currentPath, part);
+    try {
+      const info = await Deno.lstat(currentPath);
+      if (info.isSymlink) {
+        throw new Error(
+          `Refusing to write through symlink "${currentPath}".`,
+        );
+      }
+    } catch (error) {
+      if (error instanceof Deno.errors.NotFound) {
+        return;
+      }
+      throw error;
+    }
   }
 }
 

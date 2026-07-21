@@ -4,6 +4,8 @@
     "npm:@commitlint/cli@21.2.1": "21.2.1_@types+node@26.1.1_typescript@6.0.3",
     "npm:@commitlint/config-conventional@21.2.0": "21.2.0",
     "npm:@devcontainers/cli@0.87.0": "0.87.0",
+    "npm:conventional-changelog-conventionalcommits@10.2.1": "10.2.1",
+    "npm:conventional-changelog@8.1.0": "8.1.0",
     "npm:cspell@8.19.4": "8.19.4",
     "npm:typescript@6.0.3": "6.0.3",
     "npm:yaml@2.9.0": "2.9.0"
@@ -150,12 +152,16 @@
         "picocolors"
       ]
     },
-    "@conventional-changelog/git-client@3.1.0": {
+    "@conventional-changelog/git-client@3.1.0_conventional-commits-parser@7.1.0": {
       "integrity": "sha512-Tqa/gHco2WJWa740NRjOrfKVvzIqxkZpecb8bemaQ8sKM5PXb1UK4uTyTb/1wIqNuOVaDOFxyBdhTIQZn6gdjQ==",
       "dependencies": [
         "@simple-libs/child-process-utils",
         "@simple-libs/stream-utils",
+        "conventional-commits-parser",
         "semver"
+      ],
+      "optionalPeers": [
+        "conventional-commits-parser"
       ]
     },
     "@conventional-changelog/template@1.2.1": {
@@ -457,6 +463,16 @@
         "@simple-libs/stream-utils"
       ]
     },
+    "@simple-libs/hosted-git-info@2.0.0": {
+      "integrity": "sha512-55XwK/GYgV58PuN8lZFhI1qRxdKoMLJocXl/yM1EPqazFDmM4QWY7q6BxPCPDNKTNunj794DSD4h0H7SrqUdMg=="
+    },
+    "@simple-libs/normalize-package-data@1.0.0": {
+      "integrity": "sha512-/EOmFBekV9tGee8gac/k+5Ox3twkypNqh5TfxA9vTkmcJkjm6f1xqrlstDNOrEhTvnYyVtU6Du2ZhY/IV1+9GA==",
+      "dependencies": [
+        "@simple-libs/hosted-git-info",
+        "semver"
+      ]
+    },
     "@simple-libs/stream-utils@2.0.0": {
       "integrity": "sha512-fCTuZK4QBa+39Oz9l4OGfJfz+GpwCp3AqO7Zch3to99xHPgstVsRFpeQ8LNd2o1Gv8raL2mCFwiaHh7bFSp5DQ=="
     },
@@ -538,6 +554,37 @@
       "dependencies": [
         "@conventional-changelog/template"
       ]
+    },
+    "conventional-changelog-preset-loader@6.0.1": {
+      "integrity": "sha512-GZ8E3RQzXQb3JFy0pKl8oeSf7ENIhvAMvJr+PlWkavZOesLHHdhkfNJ4SvW35eo1Fu2+EyVxWQ1tVvtzAG2iWg=="
+    },
+    "conventional-changelog-writer@9.2.0": {
+      "integrity": "sha512-eACD5BaAQCYjeI3RExkCZopNaaIuXzCP4kaAb2lEFXcGa/KOuxJfj8v/SnjhvF6377pYn0A2Gji+6GhwUK8rEA==",
+      "dependencies": [
+        "@conventional-changelog/template",
+        "@simple-libs/stream-utils",
+        "argue-cli",
+        "conventional-commits-filter",
+        "semver"
+      ],
+      "bin": true
+    },
+    "conventional-changelog@8.1.0": {
+      "integrity": "sha512-idt1JK+3+Nt7gqH/d/sEYWdDeR+5XPov/jssmFN6XxmYSRlonTWSDWhWUPkmm0zbwYjtVdt+4My5aiPkKyvocw==",
+      "dependencies": [
+        "@conventional-changelog/git-client",
+        "@simple-libs/hosted-git-info",
+        "@simple-libs/normalize-package-data",
+        "argue-cli",
+        "conventional-changelog-preset-loader",
+        "conventional-changelog-writer",
+        "conventional-commits-parser",
+        "fd-package-json"
+      ],
+      "bin": true
+    },
+    "conventional-commits-filter@6.0.1": {
+      "integrity": "sha512-cs+LadpH7Kpw0M3k8wurk+sOVVDAENA0iK4OBOrkL94j5lEVYRJ4j3zd2bhY9qgzyrPqthdcYT3axzRN7AliMg=="
     },
     "conventional-commits-parser@7.1.0": {
       "integrity": "sha512-DPp6hkUjvwIivxbkrTiLXeRswNv1A/4GFA2X6scXma0AMa9632V3TwxmrlkUIEtUktiM3Ln+RrSH2xlP3/jUTw==",
@@ -714,6 +761,12 @@
     "fast-uri@3.1.4": {
       "integrity": "sha512-8JnbkQ4juDyvYs4mgFGQqg4yCYtFDtUtmp2QIQq11ZZe5CFQ5wcqm1rqDgAh/QdMySuBnPzMUiJUNZG5N/AiQw=="
     },
+    "fd-package-json@2.0.0": {
+      "integrity": "sha512-jKmm9YtsNXN789RS/0mSzOC1NUq9mkVd65vbSSVsKdjGvYXBuE4oWe2QOEoFeRmJg+lPuZxpmrfFclNhoRMneQ==",
+      "dependencies": [
+        "walk-up-path"
+      ]
+    },
     "fdir@6.5.0_picomatch@4.0.4": {
       "integrity": "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==",
       "dependencies": [
@@ -850,8 +903,8 @@
     "resolve-from@5.0.0": {
       "integrity": "sha512-qYg9KP24dD5qka9J47d0aVky0N+b4fTU89LN9iDnjB5waksiC49rvMB0PrUJQGoTmH50XPiqOvAjDfaijGxYZw=="
     },
-    "semver@7.8.0": {
-      "integrity": "sha512-AcM7dV/5ul4EekoQ29Agm5vri8JNqRyj39o0qpX6vDF2GZrtutZl5RwgD1XnZjiTAfncsJhMI48QQH3sN87YNA==",
+    "semver@7.8.5": {
+      "integrity": "sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==",
       "bin": true
     },
     "string-width@7.2.0": {
@@ -890,6 +943,9 @@
     },
     "vscode-uri@3.1.0": {
       "integrity": "sha512-/BpdSx+yCQGnCvecbyXdxHDkuk55/G3xwnC0GqY4gmQ3j+A+g8kzzgB4Nk/SINjqn6+waqw3EgbVF2QKExkRxQ=="
+    },
+    "walk-up-path@4.0.0": {
+      "integrity": "sha512-3hu+tD8YzSLGuFYtPRb48vdhKMi0KQV5sn+uWr8+7dMEq/2G/dtLrdDinkLjqq5TIbIBjYJ4Ax/n3YiaW7QM8A=="
     },
     "wrap-ansi@9.0.2": {
       "integrity": "sha512-42AtmgqjV+X1VpdOfyTGOYRi0/zsoLqtXQckTmqTeybT+BDIbM/Guxo7x3pE2vtpr1ok6xRqM9OpBe+Jyoqyww==",
@@ -933,6 +989,8 @@
         "npm:@commitlint/cli@21.2.1",
         "npm:@commitlint/config-conventional@21.2.0",
         "npm:@devcontainers/cli@0.87.0",
+        "npm:conventional-changelog-conventionalcommits@10.2.1",
+        "npm:conventional-changelog@8.1.0",
         "npm:cspell@8.19.4",
         "npm:typescript@6.0.3"
       ]

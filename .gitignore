@@ -6,5 +6,6 @@
 .cspellcache
 dist/
 node_modules/
+.release/
 .npm-cache/
 coverage/

@@ -56,3 +56,8 @@ For multiple routes, set `TUNNEL_ROUTES` to JSON:
 ```
 
 Do not commit real secrets to this repo.
+
+When origin signing is enabled, verify requests with
+`verifyBunnyTunnelSignature()` before consuming the body. Signature `v2` binds
+the request to its destination origin and uses a nonce. Multi-instance origins
+should provide a shared atomic replay cache; see the package README.

@@ -35,7 +35,10 @@ If `TUNNEL_ORIGIN_SHARED_SECRET` is set, the script signs origin requests with
 HMAC headers. The origin must verify those headers and reject unsigned or stale
 requests for the signing layer to provide security. The package exports
 `verifyBunnyTunnelSignature()` for this purpose. Signed requests should be
-accepted only within a short timestamp tolerance to limit replay.
+accepted only within a short timestamp tolerance. Signature `v2` binds the
+destination origin and includes a random nonce. The default verifier cache
+prevents replay within one process or isolate; multi-instance origins need a
+shared atomic replay cache for deployment-wide replay protection.
 
 ## Operational Guidance
 
@@ -57,5 +60,7 @@ accepted only within a short timestamp tolerance to limit replay.
 - Keep `TUNNEL_ALLOW_INSECURE_HTTP=false` in Bunny.
 - Keep `TUNNEL_ALLOW_INSECURE_ORIGIN=false`; use HTTPS to the origin.
 - Keep `TUNNEL_MAX_BODY_BYTES` no larger than the origin actually needs.
+- Set the verifier's `maxBodyBytes` to the origin's smallest accepted body
+  limit.
 - Keep origin secrets and viewer tokens in Bunny Edge Script Env Configuration,
   not in source control.

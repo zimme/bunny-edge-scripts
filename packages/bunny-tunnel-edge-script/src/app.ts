@@ -30,8 +30,15 @@ export interface RuntimeConfig {
 
 export interface VerifySignatureOptions {
   body?: ArrayBuffer;
+  expectedOrigin?: string | URL;
+  maxBodyBytes?: number;
   now?: () => Date;
+  replayCache?: SignatureReplayCache;
   toleranceSeconds?: number;
+}
+
+export interface SignatureReplayCache {
+  consume(nonce: string, expiresAtSeconds: number): boolean | Promise<boolean>;
 }
 
 export interface HandlerOptions {
@@ -79,7 +86,11 @@ const DEFAULT_ALLOWED_METHODS = [
 const DEFAULT_HEALTH_PATH = "/__bunny_tunnel/healthz";
 const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024;
 const MAX_BODY_BYTES = 32 * 1024 * 1024;
-const SIGNATURE_VERSION = "v1";
+const DEFAULT_SIGNATURE_TOLERANCE_SECONDS = 300;
+const MAX_SIGNATURE_TOLERANCE_SECONDS = 3600;
+const MAX_REPLAY_CACHE_ENTRIES = 10_000;
+const SIGNATURE_VERSION = "v2";
+const signatureReplayCache = new Map<string, number>();
 
 export function readBunnyTunnelConfigFromEnv(env: EnvReader): RuntimeConfig {
   const routes = readRoutes(env);
@@ -101,15 +112,18 @@ export function readBunnyTunnelConfigFromEnv(env: EnvReader): RuntimeConfig {
     );
   }
 
+  const configuredAllowedMethods = splitList(
+    env.get("TUNNEL_ALLOWED_METHODS"),
+  ).map((method) => method.toUpperCase());
+
   return {
     routes,
     allowPublic,
     viewerTokens,
     originSharedSecret: optionalString(env.get("TUNNEL_ORIGIN_SHARED_SECRET")),
-    allowedMethods:
-      splitList(env.get("TUNNEL_ALLOWED_METHODS")).map((method) =>
-        method.toUpperCase()
-      ).filter(Boolean) || DEFAULT_ALLOWED_METHODS,
+    allowedMethods: configuredAllowedMethods.length > 0
+      ? configuredAllowedMethods
+      : DEFAULT_ALLOWED_METHODS,
     deniedPathPrefixes: splitList(env.get("TUNNEL_DENIED_PATH_PREFIXES"))
       .map(normalizePath),
     allowInsecureHttp: readBoolean(env.get("TUNNEL_ALLOW_INSECURE_HTTP")),
@@ -169,7 +183,12 @@ async function handleRequest(
     return textResponse("HTTPS required\n", 400);
   }
 
-  if (requestUrl.pathname === config.healthPath) {
+  const canonicalPathname = canonicalPathnameForSecurity(requestUrl.pathname);
+  if (!canonicalPathname) {
+    return textResponse("invalid path\n", 400);
+  }
+
+  if (canonicalPathname === config.healthPath) {
     return jsonResponse({ ok: true, service: "bunny-tunnel-edge-script" });
   }
 
@@ -179,12 +198,8 @@ async function handleRequest(
     });
   }
 
-  if (isDeniedPath(requestUrl.pathname, config.deniedPathPrefixes)) {
+  if (isDeniedPath(canonicalPathname, config.deniedPathPrefixes)) {
     return textResponse("not found\n", 404);
-  }
-
-  if (hasAmbiguousEncodedPath(requestUrl.pathname)) {
-    return textResponse("invalid path\n", 400);
   }
 
   if (!isViewerAuthorized(request, config.viewerTokens)) {
@@ -193,7 +208,7 @@ async function handleRequest(
     });
   }
 
-  const selected = selectRoute(requestUrl, config.routes);
+  const selected = selectRoute(requestUrl, canonicalPathname, config.routes);
   if (!selected) {
     return textResponse("no route\n", 404);
   }
@@ -267,18 +282,23 @@ async function buildUpstreamHeaders(
 
   if (options.config.originSharedSecret) {
     const timestamp = Math.floor(options.now().getTime() / 1000).toString();
+    const nonce = randomNonce();
     const bodyHash = await sha256Hex(options.body ?? new ArrayBuffer(0));
     const signedTarget = options.selected.targetUrl.pathname +
       options.selected.targetUrl.search;
     const payload = [
       options.request.method.toUpperCase(),
+      options.selected.targetUrl.origin,
       signedTarget,
       timestamp,
+      nonce,
       bodyHash,
     ].join("\n");
 
     headers.set("x-bunny-tunnel-version", SIGNATURE_VERSION);
+    headers.set("x-bunny-tunnel-origin", options.selected.targetUrl.origin);
     headers.set("x-bunny-tunnel-timestamp", timestamp);
+    headers.set("x-bunny-tunnel-nonce", nonce);
     headers.set("x-bunny-tunnel-body-sha256", bodyHash);
     headers.set(
       "x-bunny-tunnel-signature",
@@ -298,11 +318,15 @@ export async function verifyBunnyTunnelSignature(
   options: VerifySignatureOptions = {},
 ): Promise<boolean> {
   const version = request.headers.get("x-bunny-tunnel-version");
+  const signedOrigin = request.headers.get("x-bunny-tunnel-origin") ?? "";
   const timestamp = request.headers.get("x-bunny-tunnel-timestamp") ?? "";
+  const nonce = request.headers.get("x-bunny-tunnel-nonce") ?? "";
   const bodyHash = request.headers.get("x-bunny-tunnel-body-sha256") ?? "";
   const signature = request.headers.get("x-bunny-tunnel-signature") ?? "";
   if (
-    !secret || version !== SIGNATURE_VERSION || !/^\d+$/.test(timestamp) ||
+    !secret || version !== SIGNATURE_VERSION || !signedOrigin ||
+    !/^\d+$/.test(timestamp) ||
+    !/^[a-f0-9]{32}$/.test(nonce) ||
     !/^[a-f0-9]{64}$/.test(bodyHash) ||
     !signature.startsWith(`${SIGNATURE_VERSION}=`)
   ) {
@@ -310,33 +334,73 @@ export async function verifyBunnyTunnelSignature(
   }
 
   const now = options.now ?? (() => new Date());
-  const tolerance = options.toleranceSeconds ?? 300;
+  const tolerance = options.toleranceSeconds ??
+    DEFAULT_SIGNATURE_TOLERANCE_SECONDS;
+  const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const timestampSeconds = Number(timestamp);
   const nowSeconds = Math.floor(now().getTime() / 1000);
   if (
-    !Number.isSafeInteger(timestampSeconds) || tolerance < 0 ||
+    !Number.isSafeInteger(timestampSeconds) ||
+    !Number.isSafeInteger(tolerance) || tolerance < 0 ||
+    tolerance > MAX_SIGNATURE_TOLERANCE_SECONDS ||
+    !Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 1 ||
+    maxBodyBytes > MAX_BODY_BYTES ||
     Math.abs(nowSeconds - timestampSeconds) > tolerance
   ) {
     return false;
   }
 
-  const body = options.body ?? await request.clone().arrayBuffer();
+  let body = options.body;
+  if (body && body.byteLength > maxBodyBytes) {
+    return false;
+  }
+  if (!body) {
+    const bodyResult = await readRequestBody(request.clone(), maxBodyBytes);
+    if (bodyResult.kind === "too-large") {
+      return false;
+    }
+    body = bodyResult.body ?? new ArrayBuffer(0);
+  }
   if (!timingSafeEqual(await sha256Hex(body), bodyHash)) {
     return false;
   }
 
   const url = new URL(request.url);
+  let expectedOrigin: string;
+  try {
+    expectedOrigin = options.expectedOrigin
+      ? new URL(options.expectedOrigin).origin
+      : url.origin;
+  } catch {
+    return false;
+  }
+  if (signedOrigin !== expectedOrigin) {
+    return false;
+  }
   const payload = [
     request.method.toUpperCase(),
+    signedOrigin,
     url.pathname + url.search,
     timestamp,
+    nonce,
     bodyHash,
   ].join("\n");
   const expected = `${SIGNATURE_VERSION}=${await hmacSha256Hex(
     secret,
     payload,
   )}`;
-  return timingSafeEqual(signature, expected);
+  if (!timingSafeEqual(signature, expected)) {
+    return false;
+  }
+
+  const expiresAtSeconds = timestampSeconds + tolerance;
+  try {
+    return options.replayCache
+      ? await options.replayCache.consume(nonce, expiresAtSeconds)
+      : consumeReplayNonce(nonce, expiresAtSeconds, nowSeconds);
+  } catch {
+    return false;
+  }
 }
 
 function readRoutes(env: EnvReader): TunnelRoute[] {
@@ -437,6 +501,7 @@ function normalizeRoute(
 
 function selectRoute(
   requestUrl: URL,
+  canonicalPathname: string,
   routes: NormalizedRoute[],
 ): SelectedRoute | undefined {
   const requestHost = normalizeHost(requestUrl.hostname);
@@ -446,25 +511,29 @@ function selectRoute(
       continue;
     }
 
-    if (!pathMatches(requestUrl.pathname, route.pathPrefix)) {
+    if (!pathMatches(canonicalPathname, route.pathPrefix)) {
       continue;
     }
 
     return {
       route,
-      targetUrl: targetUrlForRoute(requestUrl, route),
+      targetUrl: targetUrlForRoute(requestUrl, canonicalPathname, route),
     };
   }
 
   return undefined;
 }
 
-function targetUrlForRoute(requestUrl: URL, route: NormalizedRoute): URL {
+function targetUrlForRoute(
+  requestUrl: URL,
+  canonicalPathname: string,
+  route: NormalizedRoute,
+): URL {
   const targetUrl = new URL(route.origin);
   const originBasePath = trimTrailingSlash(targetUrl.pathname);
   const remainingPath = route.pathPrefix === "/"
-    ? requestUrl.pathname
-    : requestUrl.pathname.slice(route.pathPrefix.length) || "/";
+    ? canonicalPathname
+    : canonicalPathname.slice(route.pathPrefix.length) || "/";
 
   targetUrl.pathname = joinPaths(originBasePath || "/", remainingPath);
   targetUrl.search = requestUrl.search;
@@ -630,7 +699,11 @@ function normalizeHost(host: string): string {
 }
 
 function trimTrailingSlash(value: string): string {
-  return value.length > 1 ? value.replace(/\/+$/, "") : value;
+  let end = value.length;
+  while (end > 1 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return value.slice(0, end);
 }
 
 function joinPaths(basePath: string, nextPath: string): string {
@@ -647,8 +720,62 @@ function connectionHeaderNames(headers: Headers): Set<string> {
   );
 }
 
-function hasAmbiguousEncodedPath(pathname: string): boolean {
-  return /%(?:2f|5c)/i.test(pathname);
+function canonicalPathnameForSecurity(pathname: string): string | undefined {
+  for (let index = 0; index < pathname.length; index += 1) {
+    if (pathname[index] !== "%") {
+      continue;
+    }
+
+    const encodedByte = pathname.slice(index + 1, index + 3);
+    if (!/^[a-f0-9]{2}$/i.test(encodedByte)) {
+      return undefined;
+    }
+
+    const byte = Number.parseInt(encodedByte, 16);
+    if (byte === 0x25 || byte === 0x2f || byte === 0x5c) {
+      return undefined;
+    }
+    index += 2;
+  }
+
+  try {
+    const decoded = decodeURIComponent(pathname);
+    for (let index = 0; index < decoded.length; index += 1) {
+      const code = decoded.charCodeAt(index);
+      if (code <= 0x1f || code === 0x7f || code === 0x5c) {
+        return undefined;
+      }
+    }
+    return decoded;
+  } catch {
+    return undefined;
+  }
+}
+
+function randomNonce(): string {
+  return hex(crypto.getRandomValues(new Uint8Array(16)));
+}
+
+function consumeReplayNonce(
+  nonce: string,
+  expiresAtSeconds: number,
+  nowSeconds: number,
+): boolean {
+  for (const [cachedNonce, expiry] of signatureReplayCache) {
+    if (expiry < nowSeconds) {
+      signatureReplayCache.delete(cachedNonce);
+    }
+  }
+
+  if (
+    signatureReplayCache.has(nonce) ||
+    signatureReplayCache.size >= MAX_REPLAY_CACHE_ENTRIES
+  ) {
+    return false;
+  }
+
+  signatureReplayCache.set(nonce, expiresAtSeconds);
+  return true;
 }
 
 async function readRequestBody(

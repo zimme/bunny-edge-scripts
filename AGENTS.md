@@ -63,8 +63,8 @@ commands; use `CI=true` when behavior genuinely needs to differ in CI.
 - Use Conventional Commit messages. Prefer `feat`, `fix`, `docs`, `test`,
   `refactor`, `perf`, `build`, `ci`, and `chore`; mark incompatible public API
   changes with `!` and a `BREAKING CHANGE:` footer.
-- Do not create or edit `CHANGELOG.md` by hand. Release Please generates it in
-  the release pull request from commits on `main`.
+- Do not create or edit `CHANGELOG.md` by hand. The tag-only release workflow
+  generates it from Conventional Commits as a GitHub release artifact.
 - Never commit, print, or place Bunny API keys, DDNS secrets, publish tokens, or
   origin secrets in examples, fixtures, logs, or generated files.
 - Do not publish packages, create releases, or mutate live Bunny resources
@@ -100,9 +100,14 @@ references. Say explicitly when no findings remain and name residual test gaps.
 - `examples/*-edge-script-repo/`: minimal consumer deployment repos.
 - `scripts/build_npm_package.ts`: generated npm package artifacts.
 - `scripts/verify_release_version.ts`: release/package version guard.
+- `scripts/set_version.ts`: lockstep release-version updater.
+- `scripts/prepare_release.ts`: guarded version preparation and validation.
+- `scripts/create_release_tag.ts`: post-merge signed-tag creator.
+- `scripts/pre_push.ts`: local release-tag push guard.
+- `scripts/create_github_release.ts`: Conventional Changelog release builder.
+- `scripts/publish_packages.ts`: retry-safe JSR and npm package publication.
 - `scripts/verify_agent_config.ts`: instruction, skill, metadata, and shim
   guard.
-- `release-please-config.json`: lockstep version and changelog release policy.
 - `.devcontainer/`: shared local, CI, Codespaces, and agent environment.
 - `.agents/skills/`: discoverable task-specific Agent Skills.
 - `.github/workflows/`: thin CI, security, agent setup, and release wrappers.

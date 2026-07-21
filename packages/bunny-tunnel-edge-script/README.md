@@ -59,5 +59,26 @@ if (!await verifyBunnyTunnelSignature(request, originSharedSecret)) {
 }
 ```
 
-The verifier checks the HMAC, body digest, and a five-minute timestamp window by
-default. The origin must reject unsigned requests for signing to add security.
+The `v2` verifier checks the destination origin, path and query, method, HMAC,
+body digest, random nonce, and a five-minute timestamp window. It buffers at
+most 10 MiB by default; set `maxBodyBytes` to the smallest limit your origin
+accepts. The built-in bounded replay cache rejects duplicate nonces within one
+process or isolate. Multi-instance origins should pass a shared implementation:
+
+```ts
+const valid = await verifyBunnyTunnelSignature(request, originSharedSecret, {
+  maxBodyBytes: 1024 * 1024,
+  replayCache: {
+    consume(nonce, expiresAtSeconds) {
+      return sharedStore.consumeOnce(nonce, expiresAtSeconds);
+    },
+  },
+});
+```
+
+`consume` must atomically return `true` only for the nonce's first use and keep
+it until `expiresAtSeconds`. The origin must reject unsigned requests for
+signing to add security. When `TUNNEL_PRESERVE_HOST_HEADER=true`, pass the
+configured origin as `expectedOrigin` because the origin framework may build
+`request.url` from the preserved public Host header. Version `v1` signatures are
+intentionally rejected.

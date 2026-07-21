@@ -1,45 +1,61 @@
 name: Release
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
+    tags:
+      - "*.*.*"
 
-permissions:
-  contents: write
-  id-token: write
-  issues: write
-  pull-requests: write
+permissions: {}
 
 concurrency:
-  group: release
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  release:
+  publish:
+    name: Validate and publish packages
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - name: Prepare release
-        id: release
-        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
-
       - name: Checkout release tag
-        if: ${{ steps.release.outputs.release_created == 'true' }}
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          ref: ${{ steps.release.outputs.tag_name }}
+          fetch-depth: 0
 
-      - name: Verify and publish in development container
-        if: ${{ steps.release.outputs.release_created == 'true' }}
+      - name: Validate and publish in development container
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
         with:
           env: |
             CI=true
-            RELEASE_TAG=${{ steps.release.outputs.tag_name }}
+            RELEASE_TAG=${{ github.ref_name }}
           inheritEnv: true
           push: never
-          runCmd: npm run release
+          runCmd: npm run release:publish
+
+  github-release:
+    name: Create GitHub release
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Create release in development container
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
+        with:
+          env: |
+            CI=true
+            GH_TOKEN=${{ github.token }}
+            RELEASE_TAG=${{ github.ref_name }}
+          inheritEnv: true
+          push: never
+          runCmd: npm run release:create

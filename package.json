@@ -14,6 +14,8 @@
     "@commitlint/config-conventional": "21.2.0",
     "@devcontainers/cli": "0.87.0",
     "cspell": "8.19.4",
+    "conventional-changelog": "8.1.0",
+    "conventional-changelog-conventionalcommits": "10.2.1",
     "typescript": "6.0.3"
   },
   "scripts": {
@@ -27,11 +29,16 @@
     "doctor": "deno task doctor",
     "fmt": "deno task fmt",
     "lint": "deno task lint",
-    "release": "deno task release:check && npm run ci && deno task publish",
-    "setup": "deno install --frozen",
+    "hooks:install": "deno task hooks:install",
+    "release:create": "deno task release:create",
+    "release:prepare": "deno task release:prepare",
+    "release:publish": "deno task release:check && npm run ci && deno task publish",
+    "release:tag": "deno task release:tag",
+    "setup": "deno install --frozen && npm run hooks:install",
     "spellcheck": "deno task spellcheck",
     "test": "deno task test",
     "typecheck": "deno task check",
-    "validate": "npm run doctor && npm run ci"
+    "validate": "npm run doctor && npm run ci",
+    "version:set": "deno task version:set"
   }
 }

@@ -49,7 +49,8 @@ package contract unless they are re-exported from that package's root module.
 ## Versioning
 
 This project uses Semantic Versioning with all three packages released at one
-lockstep version. Release Please derives each version from Conventional Commits:
+lockstep version. Conventional Commits determine the changelog sections and
+communicate impact:
 
 - `fix:` produces a patch release.
 - `feat:` produces a minor release.
@@ -60,8 +61,10 @@ lockstep version. Release Please derives each version from Conventional Commits:
 
 Use an optional scope when it clarifies ownership, for example
 `fix(ddns): reject ambiguous record sets`. Run `npm run commits:check` locally.
-Do not edit package versions or `CHANGELOG.md`; those are generated together in
-the Release Please pull request.
+Maintainers prepare all manifest versions and validation together with
+`npm run release:prepare -- <version>` in a dedicated release commit. Do not add
+a committed `CHANGELOG.md`; the tag workflow generates release notes and
+attaches the complete changelog to the GitHub release.
 
 ## Pull Request Expectations
 

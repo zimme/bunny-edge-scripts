@@ -1,41 +1,49 @@
+import {
+  assertManifestVersions,
+  assertReleaseVersion,
+} from "./release_version.ts";
+
 const tag = Deno.env.get("RELEASE_TAG")?.trim();
 if (!tag) {
   throw new Error("RELEASE_TAG is required.");
 }
+assertReleaseVersion(tag);
 
-const expectedVersion = tag.startsWith("v") ? tag.slice(1) : tag;
-const rootPackage = JSON.parse(
-  await Deno.readTextFile("package.json"),
-) as { version?: string };
+await assertManifestVersions(tag);
 
-if (rootPackage.version !== expectedVersion) {
-  throw new Error(
-    `Root package version must equal release tag ${expectedVersion}.`,
-  );
+const tagCommit = await gitOutput([
+  "rev-parse",
+  "--verify",
+  `refs/tags/${tag}^{commit}`,
+]);
+const headCommit = await gitOutput(["rev-parse", "HEAD"]);
+if (tagCommit !== headCommit) {
+  throw new Error(`Release tag ${tag} must point to the checked-out commit.`);
 }
-
-const packageDirectories = [
-  "packages/bunny-ddns-edge-script",
-  "packages/bunny-tunnel-edge-script",
-  "packages/create-bunny-ddns",
-];
-
-for (const directory of packageDirectories) {
-  const denoConfig = JSON.parse(
-    await Deno.readTextFile(`${directory}/deno.json`),
-  ) as { version?: string };
-  const npmPackage = JSON.parse(
-    await Deno.readTextFile(`${directory}/package.json`),
-  ) as { version?: string };
-
-  if (
-    denoConfig.version !== expectedVersion ||
-    npmPackage.version !== expectedVersion
-  ) {
-    throw new Error(
-      `${directory} versions must both equal release tag ${expectedVersion}.`,
-    );
-  }
+const onMain = await new Deno.Command("git", {
+  args: [
+    "merge-base",
+    "--is-ancestor",
+    tagCommit,
+    "refs/remotes/origin/main",
+  ],
+  stderr: "null",
+  stdout: "null",
+}).output();
+if (!onMain.success) {
+  throw new Error(`Release tag ${tag} must point to a commit on origin/main.`);
 }
 
 console.log(`Release tag ${tag} matches the root and all package versions.`);
+
+async function gitOutput(args: string[]): Promise<string> {
+  const output = await new Deno.Command("git", {
+    args,
+    stderr: "inherit",
+    stdout: "piped",
+  }).output();
+  if (!output.success) {
+    throw new Error(`git ${args.join(" ")} failed.`);
+  }
+  return new TextDecoder().decode(output.stdout).trim();
+}

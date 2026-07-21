@@ -69,6 +69,23 @@ Deno.test("reads single-origin configuration from environment", () => {
   assertEquals(parsed.maxBodyBytes, 4096);
 });
 
+Deno.test("uses the secure default method allow list", () => {
+  const parsed = readBunnyTunnelConfigFromEnv({
+    get(name) {
+      const values: Record<string, string> = {
+        TUNNEL_ALLOW_PUBLIC: "true",
+        TUNNEL_ORIGIN: "https://origin.example",
+      };
+      return values[name];
+    },
+  });
+
+  assertEquals(
+    parsed.allowedMethods.join(","),
+    "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS",
+  );
+});
+
 Deno.test("requires viewer auth unless public access is explicit", () => {
   let failed = false;
   try {
@@ -299,13 +316,59 @@ Deno.test("blocks denied path prefixes before proxying", async () => {
   assertEquals(called, false);
 });
 
-Deno.test("rejects encoded path separators", async () => {
+Deno.test("rejects ambiguous encoded paths", async () => {
   const handler = createBunnyTunnelHandler({ config: config() });
+  // cspell:disable
+  for (
+    const pathname of [
+      "/admin%2Fsettings",
+      "/admin%252Fsettings",
+      "/invalid%zzpath",
+      "/invalid%C0%AFpath",
+    ]
+  ) {
+    const response = await handler(
+      new Request(`https://edge.example${pathname}`),
+    );
+    assertEquals(response.status, 400);
+  }
+  // cspell:enable
+});
+
+Deno.test("encoded path characters cannot bypass denied prefixes", async () => {
+  let called = false;
+  const handler = createBunnyTunnelHandler({
+    config: config({ deniedPathPrefixes: ["/admin"] }),
+    fetcher: () => {
+      called = true;
+      return Promise.resolve(new Response("unexpected"));
+    },
+  });
+
+  const response = await handler(new Request("https://edge.example/%61dmin"));
+
+  assertEquals(response.status, 404);
+  assertEquals(called, false);
+});
+
+Deno.test("canonicalizes safe encoded path characters before routing", async () => {
+  let proxiedUrl = "";
+  const handler = createBunnyTunnelHandler({
+    config: config({
+      routes: [{ origin: "https://origin.example", pathPrefix: "/files;v1" }],
+    }),
+    fetcher: (input) => {
+      proxiedUrl = String(input);
+      return Promise.resolve(new Response("ok"));
+    },
+  });
+
   const response = await handler(
-    new Request("https://edge.example/admin%2Fsettings"),
+    new Request("https://edge.example/files%3Bv1/report%20one"),
   );
 
-  assertEquals(response.status, 400);
+  assertEquals(response.status, 200);
+  assertEquals(proxiedUrl, "https://origin.example/report%20one");
 });
 
 Deno.test("rejects request bodies over the configured limit", async () => {
@@ -360,7 +423,18 @@ Deno.test("signs upstream requests when an origin shared secret is configured", 
   );
   assertIncludes(
     upstreamRequest.headers.get("x-bunny-tunnel-signature") ?? "",
-    "v1=",
+    "v2=",
+  );
+  assertEquals(upstreamRequest.headers.get("x-bunny-tunnel-version"), "v2");
+  assertEquals(
+    upstreamRequest.headers.get("x-bunny-tunnel-origin"),
+    "https://origin.example",
+  );
+  assert(
+    /^[a-f0-9]{32}$/.test(
+      upstreamRequest.headers.get("x-bunny-tunnel-nonce") ?? "",
+    ),
+    "Expected a random signature nonce",
   );
   assertEquals(
     await verifyBunnyTunnelSignature(upstreamRequest, "origin-secret", {
@@ -369,8 +443,102 @@ Deno.test("signs upstream requests when an origin shared secret is configured", 
     true,
   );
   assertEquals(
-    await verifyBunnyTunnelSignature(upstreamRequest, "wrong-secret", {
+    await verifyBunnyTunnelSignature(upstreamRequest, "origin-secret", {
       now: () => new Date("2026-06-26T12:00:00Z"),
+    }),
+    false,
+  );
+});
+
+Deno.test("binds signed requests to the selected origin", async () => {
+  let upstreamRequest: Request | undefined;
+  const now = () => new Date("2026-06-26T12:00:00Z");
+  const handler = createBunnyTunnelHandler({
+    config: config({ originSharedSecret: "origin-secret" }),
+    fetcher: (input, init) => {
+      upstreamRequest = input instanceof Request
+        ? input
+        : new Request(input, init);
+      return Promise.resolve(new Response("ok"));
+    },
+    now,
+  });
+
+  await handler(new Request("https://edge.example/api"));
+  assert(upstreamRequest, "Expected upstream request");
+
+  const replayedAtAnotherOrigin = new Request(
+    "https://another-origin.example/api",
+    { headers: upstreamRequest.headers },
+  );
+  assertEquals(
+    await verifyBunnyTunnelSignature(
+      replayedAtAnotherOrigin,
+      "origin-secret",
+      { now },
+    ),
+    false,
+  );
+});
+
+Deno.test("supports explicit origin binding when Host is preserved", async () => {
+  let upstreamRequest: Request | undefined;
+  const now = () => new Date("2026-06-26T12:00:00Z");
+  const handler = createBunnyTunnelHandler({
+    config: config({
+      originSharedSecret: "origin-secret",
+      preserveHostHeader: true,
+    }),
+    fetcher: (input, init) => {
+      const proxied = input instanceof Request
+        ? input
+        : new Request(input, init);
+      const observedUrl = new URL(proxied.url);
+      observedUrl.host = "edge.example";
+      upstreamRequest = new Request(observedUrl, {
+        headers: proxied.headers,
+      });
+      return Promise.resolve(new Response("ok"));
+    },
+    now,
+  });
+
+  await handler(new Request("https://edge.example/api"));
+  assert(upstreamRequest, "Expected upstream request");
+  assertEquals(
+    await verifyBunnyTunnelSignature(upstreamRequest, "origin-secret", {
+      expectedOrigin: "https://origin.example",
+      now,
+    }),
+    true,
+  );
+});
+
+Deno.test("bounds bodies while verifying origin signatures", async () => {
+  let upstreamRequest: Request | undefined;
+  const now = () => new Date("2026-06-26T12:00:00Z");
+  const handler = createBunnyTunnelHandler({
+    config: config({ originSharedSecret: "origin-secret" }),
+    fetcher: (input, init) => {
+      upstreamRequest = input instanceof Request
+        ? input
+        : new Request(input, init);
+      return Promise.resolve(new Response("ok"));
+    },
+    now,
+  });
+
+  await handler(
+    new Request("https://edge.example/api", {
+      body: "hello",
+      method: "POST",
+    }),
+  );
+  assert(upstreamRequest, "Expected upstream request");
+  assertEquals(
+    await verifyBunnyTunnelSignature(upstreamRequest, "origin-secret", {
+      maxBodyBytes: 4,
+      now,
     }),
     false,
   );

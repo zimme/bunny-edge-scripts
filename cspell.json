@@ -41,6 +41,7 @@
     "hostnames",
     "HOSTNAMES",
     "inadyn",
+    "infile",
     "myip",
     "myip6",
     "nochg",
@@ -52,6 +53,7 @@
     "spoofable",
     "subrequest",
     "tailscale",
+    "worktree",
     "zimme"
   ]
 }

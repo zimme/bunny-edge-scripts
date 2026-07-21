@@ -9,6 +9,7 @@ export type {
   Fetcher,
   HandlerOptions,
   RuntimeConfig,
+  SignatureReplayCache,
   TunnelRoute,
   VerifySignatureOptions,
 } from "./app.ts";

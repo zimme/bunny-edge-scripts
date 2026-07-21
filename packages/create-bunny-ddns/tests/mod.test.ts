@@ -50,6 +50,33 @@ Deno.test("scaffold writes a GitHub Action workflow when requested", async () =>
   assertIncludes(workflow, "deno install --frozen");
 });
 
+Deno.test("force mode refuses to overwrite through a symlink", async () => {
+  const parent = await Deno.makeTempDir();
+  const directory = `${parent}/project`;
+  const externalFile = `${parent}/outside.md`;
+  await Deno.mkdir(directory);
+  await Deno.writeTextFile(externalFile, "unchanged\n");
+  await Deno.symlink(externalFile, `${directory}/README.md`);
+
+  let failed = false;
+  try {
+    await scaffoldProject({
+      ...defaultOptions(),
+      directory,
+      force: true,
+    });
+  } catch (error) {
+    failed = error instanceof Error && error.message.includes("symlink");
+  }
+
+  if (!failed) {
+    throw new Error("Expected a symlinked output to be rejected");
+  }
+  if (await Deno.readTextFile(externalFile) !== "unchanged\n") {
+    throw new Error("Scaffold modified a file outside its target directory");
+  }
+});
+
 Deno.test("CLI rejects unknown options", async () => {
   let failed = false;
   try {

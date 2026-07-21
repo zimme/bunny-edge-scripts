@@ -178,6 +178,7 @@ access gateway:
   explicitly enabled.
 - Optionally sign every origin request with `TUNNEL_ORIGIN_SHARED_SECRET` so the
   origin can reject traffic that did not pass through your Bunny script.
+- Bind signed requests to the destination origin and reject replayed nonces.
 - Strip hop-by-hop headers and viewer `Authorization` before origin forwarding.
 - Bound buffered request bodies to 10 MiB by default.
 - Add forwarding metadata such as `x-forwarded-host`, `x-forwarded-proto`, and
@@ -367,9 +368,11 @@ deployment API and official GitHub Action upload one script file at a time.
 ## Versioning
 
 This project uses Semantic Versioning and Conventional Commits. All three
-packages share one lockstep version. Release Please prepares version bumps,
-`CHANGELOG.md`, tags, and GitHub release notes from commits on `main`; merging
-its release pull request publishes the matching packages to JSR and npm.
+packages share one lockstep version. Only pushing a SemVer tag such as `1.0.0`
+starts a release. The tagged commit must already contain that exact version in
+every manifest. The release workflow validates and publishes that immutable
+commit, then generates Conventional Changelog release notes and a complete
+changelog asset on GitHub.
 
 See [RELEASING.md](RELEASING.md) for the OIDC trusted-publishing setup and
 release checklist.

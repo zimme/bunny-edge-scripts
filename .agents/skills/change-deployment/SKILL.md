@@ -16,9 +16,10 @@ description: Modify or review Dev Container, Docker Compose, GitHub Actions, Bun
    build scripts instead.
 5. Never publish, release, push, or mutate Bunny resources without an explicit
    user request. Prefer dry runs during validation.
-6. Treat Conventional Commits as release input. Do not hand-edit `CHANGELOG.md`,
-   tags, GitHub release notes, or package versions; Release Please owns them
-   through its release pull request.
+6. Treat Conventional Commits as release-note input. Use
+   `npm run release:prepare` for lockstep versions and validation, then
+   `npm run release:tag` only after merge. Only an explicitly pushed SemVer tag
+   may publish; generated changelogs remain uncommitted release artifacts.
 7. Test a fresh cache volume when changing container lifecycle or permissions.
 8. Run `npm run validate` inside the Dev Container and inspect all JSR and npm
    dry-run contents.
