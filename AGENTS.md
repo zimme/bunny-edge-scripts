@@ -21,6 +21,11 @@ the client's behalf.
 
 ## Ground Rules For Agents
 
+- Use the Compose-backed Dev Container as the default execution environment. Run
+  `npm run devcontainer:up`, then execute commands with
+  `npm run devcontainer:exec -- <command>` when not already inside it.
+- Use root npm scripts as the stable automation interface. `npm run validate` is
+  the same complete command CI runs.
 - Preserve secure defaults. HTTPS-only, Basic Auth only, no query-string
   credentials, deny-over-allow, and fail-safe multi-record handling are
   intentional.
@@ -40,15 +45,17 @@ the client's behalf.
 ## Useful Commands
 
 ```sh
-deno install
-deno ci
-deno task fmt
-deno task spellcheck
-deno task lint
-deno task check
-deno task test
-deno task build
-deno task ci
+npm run devcontainer:up
+npm run devcontainer:exec -- npm run validate
+npm run devcontainer:down
+npm run setup
+npm run doctor
+npm run fmt
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+npm run validate
 ```
 
 ## Important Files
@@ -66,6 +73,10 @@ deno task ci
 - `scripts/build_npm_package.ts` owns npm package artifact builds.
 - `scripts/verify_release_version.ts` prevents release tags from publishing
   mismatched package versions.
+- `.devcontainer/compose.yaml` defines the shared local and CI service topology.
+- `.devcontainer/devcontainer.json` defines the editor, Features, and lifecycle.
+- `.github/workflows/copilot-setup-steps.yml` prepares the GitHub Copilot coding
+  agent and leaves the same Dev Container available to it.
 - `examples/edge-script-repo` shows the user-owned Bunny Edge Script repo shape.
 - `examples/tunnel-edge-script-repo` shows the user-owned Bunny Tunnel Edge
   Script repo shape.

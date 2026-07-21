@@ -8,7 +8,7 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
@@ -16,42 +16,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
-      - name: Setup Deno
-        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+      - name: Verify and publish in development container
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
         with:
-          deno-version: v2.x
-
-      - name: Setup Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          registry-url: https://registry.npmjs.org
-
-      - name: Install dependencies
-        run: deno ci
-
-      - name: Verify release version
-        run: deno task release:check
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-
-      - name: Verify package
-        run: deno task ci
-
-      - name: Publish bunny-ddns-edge-script to JSR
-        run: deno publish --config packages/bunny-ddns-edge-script/deno.json
-
-      - name: Publish bunny-tunnel-edge-script to JSR
-        run: deno publish --config packages/bunny-tunnel-edge-script/deno.json
-
-      - name: Publish generator to JSR
-        run: deno publish --config packages/create-bunny-ddns/deno.json
-
-      - name: Publish bunny-ddns-edge-script to npm
-        run: npm publish --workspace @zimme/bunny-ddns-edge-script
-
-      - name: Publish bunny-tunnel-edge-script to npm
-        run: npm publish --workspace @zimme/bunny-tunnel-edge-script
-
-      - name: Publish generator to npm
-        run: npm publish --workspace @zimme/create-bunny-ddns
+          env: |
+            CI=true
+            RELEASE_TAG=${{ github.event.release.tag_name }}
+          inheritEnv: true
+          push: never
+          runCmd: npm run release

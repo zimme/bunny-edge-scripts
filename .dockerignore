@@ -1,0 +1,10 @@
+.git
+.cspellcache
+.npm-cache
+.env
+.env.*
+!.env.example
+coverage
+dist
+examples/*/generated
+node_modules

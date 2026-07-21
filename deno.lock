@@ -1,6 +1,7 @@
 {
   "version": "5",
   "specifiers": {
+    "npm:@devcontainers/cli@0.87.0": "0.87.0",
     "npm:cspell@8.19.4": "8.19.4",
     "npm:typescript@6.0.3": "6.0.3"
   },
@@ -291,6 +292,10 @@
     "@cspell/url@8.19.4": {
       "integrity": "sha512-Pa474iBxS+lxsAL4XkETPGIq3EgMLCEb9agj3hAd2VGMTCApaiUvamR4b+uGXIPybN70piFxvzrfoxsG2uIP6A=="
     },
+    "@devcontainers/cli@0.87.0": {
+      "integrity": "sha512-OVwjI0LH6cYilo2MXrnqYALtCwKM0dsdphNsIguw0ESRBG8s1wPIjDbPiDO5taxPTe3cLshsQYVZY1UpKtFaJA==",
+      "bin": true
+    },
     "array-timsort@1.0.3": {
       "integrity": "sha512-/+3GRL7dDAGEfM6TseQk/U+mi18TU2Ms9I3UlLdUMhz2hbvGNTKdj9xniwXfUqgYhHxRx0+8UnKkvlNwVU+cWQ=="
     },
@@ -553,6 +558,7 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
+        "npm:@devcontainers/cli@0.87.0",
         "npm:cspell@8.19.4",
         "npm:typescript@6.0.3"
       ]

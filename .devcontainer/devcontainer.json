@@ -1,0 +1,53 @@
+{
+  "name": "bunny-edge-scripts",
+  "dockerComposeFile": "compose.yaml",
+  "service": "workspace",
+  "workspaceFolder": "/workspaces/bunny-edge-scripts",
+  "shutdownAction": "stopCompose",
+  "remoteUser": "vscode",
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "4gb",
+    "storage": "16gb"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2.5.9": {
+      "upgradePackages": false
+    },
+    "ghcr.io/devcontainers/features/node:2.1.0": {
+      "version": "24.13.1",
+      "nodeGypDependencies": false,
+      "npmVersion": "11.8.0",
+      "pnpmVersion": "none",
+      "nvmVersion": "0.40.6"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1.1.0": {
+      "version": "2.96.0"
+    },
+    "ghcr.io/devcontainers/features/copilot-cli:1.1.3": {
+      "version": "1.0.72"
+    }
+  },
+  "postCreateCommand": "npm run setup",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "denoland.vscode-deno",
+        "github.copilot",
+        "github.copilot-chat",
+        "github.vscode-github-actions",
+        "streetsidesoftware.code-spell-checker"
+      ],
+      "settings": {
+        "deno.enable": true,
+        "deno.enablePaths": [
+          "packages",
+          "examples",
+          "scripts"
+        ],
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "denoland.vscode-deno"
+      }
+    }
+  }
+}

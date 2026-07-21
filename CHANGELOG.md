@@ -5,6 +5,9 @@ Compatible Versioning (ComVer), so releases are published as `X.Y.0`.
 
 ## Unreleased
 
+- Added a pinned Docker Compose-backed Dev Container shared by local
+  development, CI, release publishing, Codespaces, and coding-agent setup.
+
 - Convert project into a monorepo with JSR and npm publishing.
 - Rename published packages to scoped JSR/npm names:
   `@zimme/bunny-ddns-edge-script` and `@zimme/create-bunny-ddns`.

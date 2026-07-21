@@ -2,8 +2,9 @@
 
 These are project-local skills for AI agents working in this repo.
 
-Use `deno ci` before the task suite when validating a clean checkout. The
-committed lockfile is part of the repository's supply-chain controls.
+Use `npm run validate` inside the Dev Container when validating a clean
+checkout. The committed Deno and Dev Container lockfiles are part of the
+repository's supply-chain controls.
 
 ## Change DDNS Behavior
 
@@ -14,9 +15,9 @@ or hostname handling.
 2. Update `packages/bunny-ddns-edge-script/src/app.js`.
 3. Add or update focused tests in
    `packages/bunny-ddns-edge-script/tests/app.test.ts`.
-4. Run `deno task test`.
-5. Run `deno task build`.
-6. Run `deno task ci` before handing off.
+4. Run `npm run test`.
+5. Run `npm run build`.
+6. Run `npm run validate` before handing off.
 7. Update `README.md` if any public behavior changed.
 
 ## Change Bunny DNS API Behavior
@@ -29,7 +30,7 @@ Use when changing how zones or records are listed, matched, created, or updated.
 3. Avoid mutating multiple matching records unless
    `DDNS_MULTI_RECORD_MODE=update-all`.
 4. Add tests for record matching and mutation payload behavior.
-5. Run `deno task ci`.
+5. Run `npm run validate`.
 
 ## Change Tunnel Runtime Behavior
 
@@ -43,7 +44,7 @@ signing, or tunnel environment configuration.
    `packages/bunny-tunnel-edge-script/tests/app.test.ts`.
 4. Keep private-network connector behavior out of this package unless a matching
    connector package and protocol are added deliberately.
-5. Run `deno task ci`.
+5. Run `npm run validate`.
 
 ## Change Deployment
 
@@ -52,8 +53,8 @@ Edge Script entrypoints.
 
 1. Keep package `dist/` directories generated.
 2. Keep `examples/edge-script-repo/script.ts` minimal.
-3. Run `deno task build`.
-4. Run `deno task ci`.
+3. Run `npm run build`.
+4. Run `npm run validate`.
 5. Verify generated package output, `deno publish --dry-run`, and
    `npm pack --dry-run` contents are expected.
 6. Update `README.md`, package manifests, and example docs if the consumer flow
