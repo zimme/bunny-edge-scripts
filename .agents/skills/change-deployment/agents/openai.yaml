@@ -1,0 +1,4 @@
+interface:
+  display_name: "Change Deployment"
+  short_description: "Safely change build and deployment flows"
+  default_prompt: "Use $change-deployment to implement and validate this deployment change."

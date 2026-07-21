@@ -1,6 +1,6 @@
 {
   "name": "@zimme/create-bunny-ddns",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "exports": {
     ".": "./src/mod.ts",
     "./create": "./src/main.ts",

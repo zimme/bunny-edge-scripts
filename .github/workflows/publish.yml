@@ -1,27 +1,45 @@
-name: Publish Package
+name: Release
 
 on:
-  release:
-    types:
-      - published
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  id-token: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
-      id-token: write
     steps:
-      - name: Checkout repository
+      - name: Prepare release
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+
+      - name: Checkout release tag
+        if: ${{ steps.release.outputs.release_created == 'true' }}
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ steps.release.outputs.tag_name }}
 
       - name: Verify and publish in development container
+        if: ${{ steps.release.outputs.release_created == 'true' }}
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
         with:
           env: |
             CI=true
-            RELEASE_TAG=${{ github.event.release.tag_name }}
+            RELEASE_TAG=${{ steps.release.outputs.tag_name }}
           inheritEnv: true
           push: never
           runCmd: npm run release

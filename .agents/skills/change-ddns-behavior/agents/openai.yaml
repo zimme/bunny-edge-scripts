@@ -1,0 +1,4 @@
+interface:
+  display_name: "Change DDNS Behavior"
+  short_description: "Safely change DDNS runtime behavior"
+  default_prompt: "Use $change-ddns-behavior to implement and validate this DDNS runtime change."

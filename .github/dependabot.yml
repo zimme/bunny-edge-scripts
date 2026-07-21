@@ -2,17 +2,25 @@ version: 2
 updates:
   - package-ecosystem: "devcontainers"
     directory: "/"
+    commit-message:
+      prefix: "build(deps)"
     schedule:
       interval: "weekly"
   - package-ecosystem: "github-actions"
     directory: "/"
+    commit-message:
+      prefix: "ci(deps)"
     schedule:
       interval: "weekly"
   - package-ecosystem: "github-actions"
     directory: "/examples/edge-script-repo/.github/workflows"
+    commit-message:
+      prefix: "ci(deps)"
     schedule:
       interval: "weekly"
   - package-ecosystem: "github-actions"
     directory: "/examples/tunnel-edge-script-repo/.github/workflows"
+    commit-message:
+      prefix: "ci(deps)"
     schedule:
       interval: "weekly"

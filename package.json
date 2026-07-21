@@ -1,5 +1,6 @@
 {
   "name": "bunny-edge-scripts-monorepo",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "packageManager": "npm@11.8.0",
@@ -9,13 +10,17 @@
     "packages/create-bunny-ddns"
   ],
   "devDependencies": {
+    "@commitlint/cli": "21.2.1",
+    "@commitlint/config-conventional": "21.2.0",
     "@devcontainers/cli": "0.87.0",
     "cspell": "8.19.4",
     "typescript": "6.0.3"
   },
   "scripts": {
+    "agents:check": "deno task agents:check",
     "build": "deno task build",
-    "ci": "deno ci && deno task ci",
+    "ci": "deno ci && npm run commits:check && deno task ci",
+    "commits:check": "commitlint --from \"$(git rev-list --max-parents=0 HEAD)\" --to HEAD --verbose",
     "devcontainer:down": "docker compose -f .devcontainer/compose.yaml down",
     "devcontainer:exec": "npm exec --yes --package=@devcontainers/cli@0.87.0 -- devcontainer exec --workspace-folder .",
     "devcontainer:up": "npm exec --yes --package=@devcontainers/cli@0.87.0 -- devcontainer up --workspace-folder . --frozen-lockfile",

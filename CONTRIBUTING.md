@@ -48,12 +48,20 @@ package contract unless they are re-exported from that package's root module.
 
 ## Versioning
 
-This project uses Compatible Versioning (ComVer).
+This project uses Semantic Versioning with all three packages released at one
+lockstep version. Release Please derives each version from Conventional Commits:
 
-- Compatible releases increment `MINOR` and keep `PATCH` at `0`
-- Incompatible releases increment `MAJOR` and reset `MINOR` to `0`
-- Release notes and the changelog carry the detail that SemVer patch releases
-  would normally try to encode
+- `fix:` produces a patch release.
+- `feat:` produces a minor release.
+- A type followed by `!`, with a `BREAKING CHANGE:` footer, produces a major
+  release.
+- `docs:`, `test:`, `build:`, `ci:`, and `chore:` do not trigger a release by
+  themselves.
+
+Use an optional scope when it clarifies ownership, for example
+`fix(ddns): reject ambiguous record sets`. Run `npm run commits:check` locally.
+Do not edit package versions or `CHANGELOG.md`; those are generated together in
+the Release Please pull request.
 
 ## Pull Request Expectations
 
@@ -63,3 +71,5 @@ This project uses Compatible Versioning (ComVer).
 - Update `README.md` when configuration, endpoints, response codes, or deploy
   behavior changes.
 - Avoid runtime dependencies unless they are clearly worth the operational cost.
+- Use a Conventional Commit title for each pull request and squash-merge it so
+  the title becomes the single commit on `main`.

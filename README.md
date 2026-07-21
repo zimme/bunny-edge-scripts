@@ -366,9 +366,10 @@ deployment API and official GitHub Action upload one script file at a time.
 
 ## Versioning
 
-This project uses Compatible Versioning (ComVer). Releases are published as
-`X.Y.0`: compatible changes increment `Y`, incompatible changes increment `X`,
-and patch releases are intentionally not used.
+This project uses Semantic Versioning and Conventional Commits. All three
+packages share one lockstep version. Release Please prepares version bumps,
+`CHANGELOG.md`, tags, and GitHub release notes from commits on `main`; merging
+its release pull request publishes the matching packages to JSR and npm.
 
 See [RELEASING.md](RELEASING.md) for the OIDC trusted-publishing setup and
 release checklist.
@@ -405,10 +406,15 @@ npm run validate
 ```
 
 `npm run validate` is the complete check used by CI. It verifies the pinned
-toolchain, performs a frozen dependency install, and runs formatting, spelling,
-linting, typechecking, tests, builds, smoke checks, dependency audit, and
-JSR/npm publication dry-runs. GitHub Actions sets `CI=true`; no separate CI-only
-script is maintained.
+toolchain, performs a frozen dependency install, checks Conventional Commits,
+and runs formatting, spelling, agent configuration, linting, typechecking,
+tests, builds, smoke checks, dependency audit, and JSR/npm publication dry-runs.
+GitHub Actions sets `CI=true`; no separate CI-only script is maintained.
+
+Agent-wide project guidance lives in `AGENTS.md`. Focused workflows use the open
+Agent Skills format under `.agents/skills/`, with compatibility shims for GitHub
+Copilot, Claude Code, and Gemini CLI. Run `npm run agents:check` to validate
+instruction imports, skill metadata, UI metadata, and skill-directory symlinks.
 
 Host-side Deno commands remain available as a fallback. Use `deno install` when
 intentionally updating dependencies and `deno ci` for a frozen install from the

@@ -1,55 +1,39 @@
 # AGENTS.md
 
-This repository is intentionally AI-agent friendly. Agents should be able to
-understand, modify, test, and deploy the project without hidden context.
+This repository is intentionally friendly to coding agents. This file is the
+canonical, cross-agent source for durable project instructions. Task-specific
+workflows live in `.agents/skills/` and should be loaded only when relevant.
 
-## Project Intent
+## Project intent
 
-This monorepo publishes three packages:
+This Deno-first monorepo publishes three packages to JSR and npm:
 
-- `@zimme/bunny-ddns-edge-script`, the runtime DDNS handler published to JSR and
-  npm.
-- `@zimme/bunny-tunnel-edge-script`, the runtime tunnel/access gateway handler
-  published to JSR and npm.
-- `@zimme/create-bunny-ddns`, the scaffold generator for personal deployment
-  repos published to JSR and npm.
+- `@zimme/bunny-ddns-edge-script`: secure DynDNS-compatible Bunny DNS updates.
+- `@zimme/bunny-tunnel-edge-script`: a secure Bunny Edge Script HTTP gateway.
+- `@zimme/create-bunny-ddns`: a generator for personal DDNS deployment repos.
 
-The generated Bunny Edge Script exposes secure DynDNS-compatible endpoints for
-inadyn and similar clients. The client gets a DDNS secret. The script keeps the
-Bunny API key in the Edge Script environment and updates Bunny DNS records on
-the client's behalf.
+Runtime packages execute on Bunny Edge Scripting. DDNS clients receive a limited
+shared secret; Bunny API keys remain in the Edge Script environment.
 
-## Ground Rules For Agents
+## Execution environment
 
-- Use the Compose-backed Dev Container as the default execution environment. Run
-  `npm run devcontainer:up`, then execute commands with
-  `npm run devcontainer:exec -- <command>` when not already inside it.
-- Use root npm scripts as the stable automation interface. `npm run validate` is
-  the same complete command CI runs.
-- Preserve secure defaults. HTTPS-only, Basic Auth only, no query-string
-  credentials, deny-over-allow, and fail-safe multi-record handling are
-  intentional.
-- Preserve secure tunnel defaults. HTTPS-only viewers and origins, bounded
-  request bodies, stripped hop-by-hop, authorization, and spoofable forwarding
-  headers, deny-first path filtering, and optional signed origin forwarding are
-  intentional for tunnel work.
-- Keep Bunny deployment simple. Consumer repos should need only a tiny
-  `script.ts` entrypoint that imports this package.
-- Do not edit `dist/` directly. Edit `src/`, then run `deno task build` or let
-  `npm pack` regenerate package output through `prepack`.
-- Prefer no runtime dependencies. If a dependency is necessary, explain why in
-  the PR and update the deployment notes.
-- Update docs and tests alongside behavior changes.
-- Treat the Bunny API key as a secret in examples and tests.
-
-## Useful Commands
+Use the Docker Compose-backed Dev Container for repository work. From the host:
 
 ```sh
 npm run devcontainer:up
-npm run devcontainer:exec -- npm run validate
+npm run devcontainer:exec -- <command>
 npm run devcontainer:down
+```
+
+When already inside the container, run commands directly. The GitHub Copilot
+setup workflow starts the same container before the coding agent begins.
+
+Use root npm scripts as the stable command interface. They delegate project work
+to Deno while retaining npm publication support:
+
+```sh
 npm run setup
-npm run doctor
+npm run agents:check
 npm run fmt
 npm run lint
 npm run typecheck
@@ -58,29 +42,73 @@ npm run build
 npm run validate
 ```
 
-## Important Files
+`npm run validate` is the complete local and CI check. Do not invent CI-only
+commands; use `CI=true` when behavior genuinely needs to differ in CI.
 
-- `packages/bunny-ddns-edge-script/src/app.js` contains the testable DDNS and
-  Bunny DNS logic.
-- `packages/bunny-tunnel-edge-script/src/app.ts` contains the testable tunnel
-  routing, auth, signing, and proxy logic.
-- `packages/bunny-ddns-edge-script/src/mod.ts` is the runtime package
-  entrypoint.
-- `packages/bunny-tunnel-edge-script/src/mod.ts` is the tunnel package
-  entrypoint.
-- `packages/create-bunny-ddns/src/main.ts` is the scaffold CLI.
-- `packages/*/dist/` are generated local npm package artifact directories.
-- `scripts/build_npm_package.ts` owns npm package artifact builds.
-- `scripts/verify_release_version.ts` prevents release tags from publishing
-  mismatched package versions.
-- `.devcontainer/compose.yaml` defines the shared local and CI service topology.
-- `.devcontainer/devcontainer.json` defines the editor, Features, and lifecycle.
-- `.github/workflows/copilot-setup-steps.yml` prepares the GitHub Copilot coding
-  agent and leaves the same Dev Container available to it.
-- `examples/edge-script-repo` shows the user-owned Bunny Edge Script repo shape.
-- `examples/tunnel-edge-script-repo` shows the user-owned Bunny Tunnel Edge
-  Script repo shape.
-- `packages/bunny-ddns-edge-script/tests/app.test.ts` covers endpoint, auth,
-  allow/deny, IP family, and DNS mutation behavior.
-- `packages/bunny-tunnel-edge-script/tests/app.test.ts` covers route selection,
-  viewer auth, path/method filtering, origin signing, and proxy behavior.
+## Engineering rules
+
+- Preserve DDNS secure defaults: HTTPS-only, Basic Auth only, no query-string
+  credentials, deny-over-allow, and fail-safe multi-record handling.
+- Preserve tunnel secure defaults: HTTPS-only viewers and origins, bounded
+  request bodies, stripped authorization, hop-by-hop, signature, and spoofable
+  forwarding headers, deny-first path filtering, and optional origin signing.
+- Keep consumer deployment repos small. Runtime entrypoints should only adapt
+  environment configuration and register the package handler.
+- Prefer no runtime dependencies. Explain and document any dependency that is
+  necessary.
+- Edit package `src/` files, never generated `dist/` or `generated/` output.
+- Use structured parsers and existing repository patterns before adding new
+  abstractions.
+- Update focused tests and user documentation with behavior changes.
+- Use Conventional Commit messages. Prefer `feat`, `fix`, `docs`, `test`,
+  `refactor`, `perf`, `build`, `ci`, and `chore`; mark incompatible public API
+  changes with `!` and a `BREAKING CHANGE:` footer.
+- Do not create or edit `CHANGELOG.md` by hand. Release Please generates it in
+  the release pull request from commits on `main`.
+- Never commit, print, or place Bunny API keys, DDNS secrets, publish tokens, or
+  origin secrets in examples, fixtures, logs, or generated files.
+- Do not publish packages, create releases, or mutate live Bunny resources
+  unless the user explicitly requests it.
+
+## Completion criteria
+
+Before handing off a code or configuration change:
+
+1. Run focused tests while iterating.
+2. Run `npm run validate` inside the Dev Container.
+3. Review the final diff for regressions, generated files, secrets, and
+   unrelated changes.
+4. Update `README.md`, package docs, examples, or security docs when their
+   documented behavior changed.
+5. Report any check that could not run and why.
+
+## Review guidelines
+
+When asked to review, lead with actionable findings ordered by severity. Focus
+on authentication and authorization boundaries, secret handling, hostname and
+zone scope, DNS mutation safety, proxy header handling, Bunny Edge Scripting
+limits, package compatibility, and missing tests. Include file and line
+references. Say explicitly when no findings remain and name residual test gaps.
+
+## Repository map
+
+- `packages/bunny-ddns-edge-script/src/app.js`: DDNS and Bunny DNS logic.
+- `packages/bunny-tunnel-edge-script/src/app.ts`: tunnel routing and proxy
+  logic.
+- `packages/create-bunny-ddns/src/`: scaffold generator implementation.
+- `packages/*/tests/`: package-focused tests.
+- `examples/*-edge-script-repo/`: minimal consumer deployment repos.
+- `scripts/build_npm_package.ts`: generated npm package artifacts.
+- `scripts/verify_release_version.ts`: release/package version guard.
+- `scripts/verify_agent_config.ts`: instruction, skill, metadata, and shim
+  guard.
+- `release-please-config.json`: lockstep version and changelog release policy.
+- `.devcontainer/`: shared local, CI, Codespaces, and agent environment.
+- `.agents/skills/`: discoverable task-specific Agent Skills.
+- `.github/workflows/`: thin CI, security, agent setup, and release wrappers.
+
+## Task skills
+
+Use a matching skill from `.agents/skills/` for DDNS behavior, Bunny DNS API,
+tunnel runtime, deployment/release, or security-configuration work. `SKILLS.md`
+is the human-readable index; each `SKILL.md` is the executable source.

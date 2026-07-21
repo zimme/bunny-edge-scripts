@@ -4,6 +4,16 @@ if (!tag) {
 }
 
 const expectedVersion = tag.startsWith("v") ? tag.slice(1) : tag;
+const rootPackage = JSON.parse(
+  await Deno.readTextFile("package.json"),
+) as { version?: string };
+
+if (rootPackage.version !== expectedVersion) {
+  throw new Error(
+    `Root package version must equal release tag ${expectedVersion}.`,
+  );
+}
+
 const packageDirectories = [
   "packages/bunny-ddns-edge-script",
   "packages/bunny-tunnel-edge-script",
@@ -28,4 +38,4 @@ for (const directory of packageDirectories) {
   }
 }
 
-console.log(`Release tag ${tag} matches all package versions.`);
+console.log(`Release tag ${tag} matches the root and all package versions.`);

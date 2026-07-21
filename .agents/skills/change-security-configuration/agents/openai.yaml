@@ -1,0 +1,4 @@
+interface:
+  display_name: "Change Security Configuration"
+  short_description: "Safely change security configuration"
+  default_prompt: "Use $change-security-configuration to implement and validate this security configuration change."

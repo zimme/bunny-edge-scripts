@@ -1,6 +1,6 @@
 {
   "name": "@zimme/bunny-ddns-edge-script",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "description": "Secure DynDNS-compatible update handler for bunny.net Edge Scripts.",
   "type": "module",
   "license": "MIT",

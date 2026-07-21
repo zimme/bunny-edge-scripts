@@ -6,21 +6,23 @@
   ],
   "imports": {
     "@zimme/bunny-ddns-edge-script": "./packages/bunny-ddns-edge-script/src/mod.ts",
-    "@zimme/bunny-tunnel-edge-script": "./packages/bunny-tunnel-edge-script/src/mod.ts"
+    "@zimme/bunny-tunnel-edge-script": "./packages/bunny-tunnel-edge-script/src/mod.ts",
+    "yaml": "npm:yaml@2.9.0"
   },
   "tasks": {
+    "agents:check": "deno run --allow-env=LOG_STREAM,LOG_TOKENS --allow-read=AGENTS.md,CLAUDE.md,GEMINI.md,.agents,.claude,.gemini,.github/copilot-instructions.md scripts/verify_agent_config.ts",
     "build": "deno task --filter @zimme/bunny-ddns-edge-script build && deno task --filter @zimme/bunny-tunnel-edge-script build && deno task --filter @zimme/create-bunny-ddns build && deno task build:example",
     "build:example": "deno bundle --external @bunny.net/edgescript-sdk examples/edge-script-repo/script.ts -o examples/edge-script-repo/generated/script.ts && deno bundle --external @bunny.net/edgescript-sdk examples/tunnel-edge-script-repo/script.ts -o examples/tunnel-edge-script-repo/generated/script.ts && deno fmt --config deno.json examples/edge-script-repo/generated/script.ts examples/tunnel-edge-script-repo/generated/script.ts",
     "check": "deno task --filter @zimme/bunny-ddns-edge-script check && deno task --filter @zimme/bunny-tunnel-edge-script check && deno task --filter @zimme/create-bunny-ddns check && deno check examples/edge-script-repo/script.ts && deno check examples/tunnel-edge-script-repo/script.ts",
     "doctor": "deno run --allow-read=.tool-versions --allow-run=node,npm,gh,copilot scripts/verify_toolchain.ts",
     "audit": "deno audit",
-    "ci": "deno fmt --check && deno task spellcheck && deno lint && deno task check && deno task test && deno task build && deno task smoke && deno task audit && deno task publish:dry-run",
+    "ci": "deno task agents:check && deno fmt --check && deno task spellcheck && deno lint && deno task check && deno task test && deno task build && deno task smoke && deno task audit && deno task publish:dry-run",
     "fmt": "deno fmt",
     "fmt:check": "deno fmt --check",
     "lint": "deno lint",
     "publish:dry-run": "deno publish --config packages/bunny-ddns-edge-script/deno.json --dry-run --allow-dirty && deno publish --config packages/bunny-tunnel-edge-script/deno.json --dry-run --allow-dirty && deno publish --config packages/create-bunny-ddns/deno.json --dry-run --allow-dirty && npm_config_cache=.npm-cache npm pack --dry-run --workspace @zimme/bunny-ddns-edge-script && npm_config_cache=.npm-cache npm pack --dry-run --workspace @zimme/bunny-tunnel-edge-script && npm_config_cache=.npm-cache npm pack --dry-run --workspace @zimme/create-bunny-ddns",
     "publish": "deno publish --config packages/bunny-ddns-edge-script/deno.json && deno publish --config packages/bunny-tunnel-edge-script/deno.json && deno publish --config packages/create-bunny-ddns/deno.json && npm publish --workspace @zimme/bunny-ddns-edge-script && npm publish --workspace @zimme/bunny-tunnel-edge-script && npm publish --workspace @zimme/create-bunny-ddns",
-    "release:check": "deno run --allow-env=RELEASE_TAG --allow-read=packages scripts/verify_release_version.ts",
+    "release:check": "deno run --allow-env=RELEASE_TAG --allow-read=package.json,packages scripts/verify_release_version.ts",
     "smoke": "deno task --filter @zimme/bunny-ddns-edge-script smoke:package && deno task --filter @zimme/bunny-tunnel-edge-script smoke:package && deno task --filter @zimme/create-bunny-ddns smoke",
     "spellcheck": "deno run -A npm:cspell@8.19.4 lint --config cspell.json --gitignore --dot --cache --no-progress .",
     "test": "deno task --filter @zimme/bunny-ddns-edge-script test && deno task --filter @zimme/bunny-tunnel-edge-script test && deno task --filter @zimme/create-bunny-ddns test"

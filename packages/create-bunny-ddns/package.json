@@ -1,6 +1,6 @@
 {
   "name": "@zimme/create-bunny-ddns",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "description": "Scaffold a Deno Bunny Edge Script repo that uses @zimme/bunny-ddns-edge-script.",
   "type": "module",
   "license": "MIT",

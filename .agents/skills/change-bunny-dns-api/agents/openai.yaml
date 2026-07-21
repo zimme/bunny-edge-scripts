@@ -1,0 +1,4 @@
+interface:
+  display_name: "Change Bunny DNS API"
+  short_description: "Safely change Bunny DNS mutations"
+  default_prompt: "Use $change-bunny-dns-api to implement and validate this Bunny DNS API change."

@@ -2,12 +2,9 @@
 
 ## Supported Versions
 
-This project uses Compatible Versioning (ComVer). Security fixes target the
-latest release line.
-
-| Version | Supported |
-| ------- | --------- |
-| 1.0     | Yes       |
+Security fixes target the latest published Semantic Version. There is no
+supported release until the first GitHub release and matching registry packages
+have been published.
 
 ## Reporting A Vulnerability
 
