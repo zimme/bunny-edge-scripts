@@ -181,7 +181,7 @@ function helpText(): string {
   return `Create a Bunny DDNS Edge Script deployment repository.
 
 Usage:
-  deno create jsr:@zimme/create-bunny-ddns [directory] -- [options]
+  deno create jsr:@zimme/create-bunny-ddns -- [directory] [options]
   npm init @zimme/bunny-ddns [directory] -- [options]
 
 Options:

@@ -16,6 +16,11 @@ Deno.test("dry-run scaffold returns expected Bunny Git files", async () => {
   if (!result.files.includes("deno.json")) {
     throw new Error("Missing deno.json");
   }
+  for (const file of ["LICENSE", ".tool-versions", ".env.example"]) {
+    if (!result.files.includes(file)) {
+      throw new Error(`Missing ${file}`);
+    }
+  }
 
   if (result.files.includes(".github/workflows/deploy.yml")) {
     throw new Error("Bunny Git mode should not include GitHub deploy workflow");
@@ -48,6 +53,16 @@ Deno.test("scaffold writes a GitHub Action workflow when requested", async () =>
     `${directory}/.github/workflows/deploy.yml`,
   );
   assertIncludes(workflow, "deno install --frozen");
+  assertIncludes(workflow, "deno-version: 2.9.3");
+  assertIncludes(workflow, "script_id: ${{ secrets.SCRIPT_ID }}");
+  if (workflow.includes("env:\n      SCRIPT_ID")) {
+    throw new Error(
+      "Deployment secrets must not be job-level environment variables",
+    );
+  }
+
+  const envExample = await Deno.readTextFile(`${directory}/.env.example`);
+  assertIncludes(envExample, "DDNS_ALLOW_ALL_HOSTS=true");
 });
 
 Deno.test("force mode refuses to overwrite through a symlink", async () => {

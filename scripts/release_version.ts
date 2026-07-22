@@ -23,6 +23,46 @@ export function assertReleaseVersion(value: string): void {
   }
 }
 
+export function compareReleaseVersions(left: string, right: string): number {
+  assertReleaseVersion(left);
+  assertReleaseVersion(right);
+  const [leftCore, leftPre] = left.split("-", 2);
+  const [rightCore, rightPre] = right.split("-", 2);
+  const leftParts = leftCore.split(".").map(BigInt);
+  const rightParts = rightCore.split(".").map(BigInt);
+  for (let index = 0; index < 3; index += 1) {
+    if (leftParts[index] !== rightParts[index]) {
+      return leftParts[index] < rightParts[index] ? -1 : 1;
+    }
+  }
+  if (leftPre === undefined || rightPre === undefined) {
+    return leftPre === rightPre ? 0 : leftPre === undefined ? 1 : -1;
+  }
+  const leftIdentifiers = leftPre.split(".");
+  const rightIdentifiers = rightPre.split(".");
+  const length = Math.max(leftIdentifiers.length, rightIdentifiers.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftIdentifier = leftIdentifiers[index];
+    const rightIdentifier = rightIdentifiers[index];
+    if (leftIdentifier === undefined || rightIdentifier === undefined) {
+      return leftIdentifier === rightIdentifier
+        ? 0
+        : leftIdentifier === undefined
+        ? -1
+        : 1;
+    }
+    if (leftIdentifier === rightIdentifier) continue;
+    const leftNumeric = /^\d+$/.test(leftIdentifier);
+    const rightNumeric = /^\d+$/.test(rightIdentifier);
+    if (leftNumeric && rightNumeric) {
+      return BigInt(leftIdentifier) < BigInt(rightIdentifier) ? -1 : 1;
+    }
+    if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
+    return leftIdentifier < rightIdentifier ? -1 : 1;
+  }
+  return 0;
+}
+
 export async function assertManifestVersions(
   version: string,
   readTextFile: (path: string) => Promise<string> = Deno.readTextFile,

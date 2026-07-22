@@ -75,6 +75,8 @@ function projectFiles(options: ScaffoldOptions): ProjectFile[] {
     { path: "script.ts", content: scriptTs() },
     { path: ".env.example", content: envExample(options) },
     { path: ".gitignore", content: gitignore() },
+    { path: ".tool-versions", content: "deno 2.9.3\n" },
+    { path: "LICENSE", content: mitLicense() },
     { path: "README.md", content: readme(options) },
   ];
 
@@ -142,6 +144,9 @@ DDNS_SHARED_SECRET=
 DDNS_USERNAME=${options.ddnsUsername}
 DDNS_ALLOWED_HOSTS=${options.allowedHosts}
 DDNS_ALLOWED_ZONES=${options.allowedZones}
+DDNS_ALLOW_ALL_HOSTS=${
+    options.allowedHosts || options.allowedZones ? "false" : "true"
+  }
 
 # Defaults shown here are built in.
 DDNS_AUTO_CREATE=true
@@ -199,6 +204,8 @@ Set these in Bunny Edge Scripting Env Configuration:
 
 Do not commit real secrets to this repo.
 Commit the generated \`deno.lock\` file so deployments remain reproducible.
+\`DDNS_ALLOW_ALL_HOSTS=true\` is generated only when no allow-list was supplied;
+replace it with \`DDNS_ALLOWED_HOSTS\` or \`DDNS_ALLOWED_ZONES\` for least privilege.
 
 ${deploySection}
 
@@ -290,9 +297,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      SCRIPT_ID: \${{ secrets.SCRIPT_ID }}
-      DEPLOY_KEY: \${{ secrets.DEPLOY_KEY }}
+    environment: production
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -300,7 +305,7 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
-          deno-version: v2.x
+          deno-version: 2.9.3
 
       - name: Install dependencies
         run: deno install --frozen
@@ -311,9 +316,34 @@ jobs:
       - name: Deploy Script to Bunny Edge Scripting
         uses: BunnyWay/actions/deploy-script@671d620bdaac002d2aa7f3dd0dda03dd99c5b749 # main
         with:
-          script_id: \${{ env.SCRIPT_ID }}
-          deploy_key: \${{ env.DEPLOY_KEY }}
+          script_id: \${{ secrets.SCRIPT_ID }}
+          deploy_key: \${{ secrets.DEPLOY_KEY }}
           file: generated/script.ts
+`;
+}
+
+function mitLicense(): string {
+  return `MIT License
+
+Copyright (c) 2026 zimme
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 `;
 }
 

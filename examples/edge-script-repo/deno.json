@@ -1,11 +1,12 @@
 {
   "imports": {
+    "@bunny.net/edgescript-sdk": "npm:@bunny.net/edgescript-sdk@0.12.1",
     "@zimme/bunny-ddns-edge-script": "jsr:@zimme/bunny-ddns-edge-script@^1.0.0"
   },
   "tasks": {
     "build": "deno bundle --external @bunny.net/edgescript-sdk script.ts -o generated/script.ts && deno fmt generated/script.ts",
     "check": "deno check script.ts",
-    "ci": "deno fmt --check && deno lint && deno task check && deno task build",
+    "ci": "deno install --frozen && deno fmt --check && deno lint && deno task check && deno task build",
     "fmt": "deno fmt",
     "lint": "deno lint"
   }

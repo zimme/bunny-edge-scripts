@@ -40,6 +40,8 @@ jobs:
           cacheFrom: ghcr.io/zimme/bunny-edge-scripts-devcontainer
           env: |
             CI=true
+            GH_TOKEN=${{ github.token }}
+            GITHUB_REPOSITORY=${{ github.repository }}
             RELEASE_TAG=${{ github.ref_name }}
           inheritEnv: true
           push: never

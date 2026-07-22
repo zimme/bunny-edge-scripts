@@ -54,6 +54,7 @@ function config(overrides: Partial<RuntimeConfig> = {}): RuntimeConfig {
     deniedHosts: [],
     allowedZones: [],
     deniedZones: [],
+    allowAllHosts: true,
     autoCreate: true,
     defaultTtl: 900,
     allowInsecureHttp: false,
@@ -349,7 +350,7 @@ Deno.test("creates missing records when auto-create is enabled", async () => {
   const zones: BunnyDnsZone[] = [{
     Id: 1,
     Domain: "example.com",
-    Records: [],
+    Records: null,
   }];
   const events: Array<{ method: string; path: string; body?: unknown }> = [];
   const handler = createHandler({
@@ -804,4 +805,105 @@ Deno.test("returns the detected client IP from checkip endpoints", async () => {
 
   assertEqual(response.status, 200);
   assertEqual(await response.text(), "203.0.113.42\n");
+});
+
+Deno.test("validates direct handler configuration before serving", () => {
+  assertThrows(() => createHandler({ config: config({ maxMutations: 41 }) }));
+  assertThrows(() =>
+    createHandler({
+      config: config({
+        allowInsecureHttp: false,
+        apiBaseUrl: "http://api.bunny.net",
+      }),
+    })
+  );
+  assertThrows(() =>
+    createHandler({
+      config: config({
+        allowAllHosts: false,
+        allowedHosts: [],
+        allowedZones: [],
+      }),
+    })
+  );
+});
+
+Deno.test("treats Bunny record names as zone-relative", async () => {
+  const events: Array<{ method: string; path: string; body?: unknown }> = [];
+  const zones: BunnyDnsZone[] = [{
+    Id: 1,
+    Domain: "example.com",
+    Records: [{
+      Id: 2,
+      Name: "foo.example.com",
+      Type: DNS_RECORD_TYPE_A,
+      Value: "192.0.2.1",
+    }],
+  }];
+  const handler = createHandler({
+    config: config({
+      allowAllHosts: false,
+      allowedHosts: ["foo.example.com"],
+      autoCreate: false,
+    }),
+    fetcher: makeFetch(zones, events),
+  });
+
+  const response = await handler(
+    makeRequest("/nic/update?hostname=foo.example.com&myip=192.0.2.2"),
+  );
+  assertEqual(await response.text(), "nohost\n");
+  assertEqual(events.filter((event) => event.method !== "GET").length, 0);
+});
+
+Deno.test("canonicalizes equivalent IPv6 addresses", async () => {
+  const zones: BunnyDnsZone[] = [{
+    Id: 1,
+    Domain: "example.com",
+    Records: [{
+      Id: 2,
+      Name: "home",
+      Type: DNS_RECORD_TYPE_AAAA,
+      Value: "2001:0DB8:0:0:0:0:0:1",
+    }],
+  }];
+  const handler = createHandler({
+    config: config(),
+    fetcher: makeFetch(zones),
+  });
+  const response = await handler(
+    makeRequest("/nic/update?hostname=home.example.com&myip6=2001:db8::1"),
+  );
+  assertEqual(await response.text(), "nochg 2001:db8::1\n");
+});
+
+Deno.test("rejects query credentials case-insensitively", async () => {
+  let called = false;
+  const handler = createHandler({
+    config: config(),
+    fetcher: () => {
+      called = true;
+      return Promise.resolve(new Response());
+    },
+  });
+  const response = await handler(
+    makeRequest(
+      "/nic/update?hostname=home.example.com&myip=192.0.2.1&Password=leaked",
+    ),
+  );
+  assertEqual(await response.text(), "badauth\n");
+  assertEqual(called, false);
+});
+
+Deno.test("treats malformed successful Bunny responses as upstream errors", async () => {
+  const handler = createHandler({
+    config: config(),
+    fetcher: () => Promise.resolve(Response.json({})),
+  });
+  const response = await withConsoleErrorSilenced(() =>
+    handler(
+      makeRequest("/nic/update?hostname=home.example.com&myip=192.0.2.1"),
+    )
+  );
+  assertEqual(await response.text(), "911\n");
 });

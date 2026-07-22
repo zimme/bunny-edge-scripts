@@ -1,4 +1,4 @@
-const mod = await import("../src/mod.ts");
+const mod = await import("../dist/mod.js");
 
 if (typeof mod.createBunnyTunnelHandler !== "function") {
   throw new Error("Missing createBunnyTunnelHandler export.");

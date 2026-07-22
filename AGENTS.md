@@ -50,10 +50,12 @@ commands; use `CI=true` when behavior genuinely needs to differ in CI.
 ## Engineering rules
 
 - Preserve DDNS secure defaults: HTTPS-only, Basic Auth only, no query-string
-  credentials, deny-over-allow, and fail-safe multi-record handling.
+  credentials, explicit hostname/zone scope (or an explicit account-wide
+  acknowledgement), deny-over-allow, and fail-safe multi-record handling.
 - Preserve tunnel secure defaults: HTTPS-only viewers and origins, bounded
   request bodies, stripped authorization, hop-by-hop, signature, and spoofable
-  forwarding headers, deny-first path filtering, and optional origin signing.
+  forwarding headers, canonicalized deny-first path filtering, strict route
+  validation, and optional origin signing.
 - Keep consumer deployment repos small. Runtime entrypoints should only adapt
   environment configuration and register the package handler.
 - Prefer no runtime dependencies. Explain and document any dependency that is
@@ -67,6 +69,7 @@ commands; use `CI=true` when behavior genuinely needs to differ in CI.
   changes with `!` and a `BREAKING CHANGE:` footer.
 - Do not create or edit `CHANGELOG.md` by hand. The tag-only release workflow
   generates it from Conventional Commits as a GitHub release artifact.
+- Keep release tags increasing SemVer, annotated, signed, and GitHub-verified.
 - Never commit, print, or place Bunny API keys, DDNS secrets, publish tokens, or
   origin secrets in examples, fixtures, logs, or generated files.
 - Do not publish packages, create releases, or mutate live Bunny resources

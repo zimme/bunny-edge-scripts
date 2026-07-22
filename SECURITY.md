@@ -8,9 +8,9 @@ have been published.
 
 ## Reporting A Vulnerability
 
-Please open a private security advisory on GitHub if available. If that is not
-available, open an issue with a minimal description and avoid posting secrets,
-working exploit tokens, or Bunny account details.
+Please use GitHub private vulnerability reporting. Do not disclose vulnerability
+details, secrets, working exploit tokens, or Bunny account details in a public
+issue.
 
 ## Threat Model
 
@@ -23,8 +23,8 @@ Update requests must provide explicit IP query parameters. The package does not
 trust forwarding headers to decide which address should be written into DNS.
 
 Use `DDNS_ALLOWED_HOSTS`, `DDNS_ALLOWED_ZONES`, `DDNS_DENIED_HOSTS`, and
-`DDNS_DENIED_ZONES` when a DDNS secret should have narrower power than the whole
-Bunny DNS account.
+`DDNS_DENIED_ZONES` to scope DDNS authority. Account-wide access requires the
+explicit `DDNS_ALLOW_ALL_HOSTS=true` acknowledgement.
 
 The tunnel package is an edge reverse proxy/access gateway. It can protect an
 origin with viewer bearer tokens and signed origin forwarding, but it does not

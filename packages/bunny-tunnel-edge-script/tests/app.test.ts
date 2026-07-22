@@ -571,3 +571,151 @@ Deno.test("health checks still require HTTPS by default", async () => {
 
   assertEquals(response.status, 400);
 });
+
+Deno.test("canonicalizes ambiguous path forms before deny checks", async () => {
+  let called = false;
+  // cspell:disable
+  const handler = createBunnyTunnelHandler({
+    config: config({ deniedPathPrefixes: ["/%61dmin"] }),
+    fetcher: () => {
+      called = true;
+      return Promise.resolve(new Response("unexpected"));
+    },
+  });
+  // cspell:enable
+
+  for (const pathname of ["//admin", "///admin/settings", "/admin;param"]) {
+    const response = await handler(
+      new Request(`https://edge.example${pathname}`),
+    );
+    assertEquals(response.status, 404);
+  }
+  assertEquals(called, false);
+});
+
+Deno.test("rejects malformed routes instead of broadening them", () => {
+  for (
+    const routes of [
+      '[{"origin":"https://origin.example","host":123}]',
+      '[{"origin":"https://origin.example","pathPrefix":false}]',
+      '[{"origin":"https://origin.example","host":"   "}]',
+      '[{"origin":"https://origin.example","unexpected":true}]',
+    ]
+  ) {
+    let failed = false;
+    try {
+      readBunnyTunnelConfigFromEnv({
+        get(name) {
+          const values: Record<string, string> = {
+            TUNNEL_ALLOW_PUBLIC: "true",
+            TUNNEL_ROUTES: routes,
+          };
+          return values[name];
+        },
+      });
+    } catch {
+      failed = true;
+    }
+    assert(failed, `Expected malformed route to fail: ${routes}`);
+  }
+});
+
+Deno.test("exact host routes outrank wildcard routes", async () => {
+  let proxiedUrl = "";
+  const handler = createBunnyTunnelHandler({
+    config: config({
+      routes: [
+        {
+          host: "*.example.com",
+          origin: "https://wildcard.example",
+          pathPrefix: "/app",
+        },
+        { host: "api.example.com", origin: "https://exact.example" },
+      ],
+    }),
+    fetcher: (input) => {
+      proxiedUrl = String(input);
+      return Promise.resolve(new Response("ok"));
+    },
+  });
+  await handler(new Request("https://api.example.com/app"));
+  assertEquals(proxiedUrl, "https://exact.example/app");
+});
+
+Deno.test("preserves repeated Set-Cookie response headers", async () => {
+  const headers = new Headers();
+  headers.append("set-cookie", "session=one; Path=/; HttpOnly");
+  headers.append("set-cookie", "csrf=two; Path=/; Secure");
+  const handler = createBunnyTunnelHandler({
+    config: config(),
+    fetcher: () => Promise.resolve(new Response("ok", { headers })),
+  });
+  const response = await handler(new Request("https://edge.example/"));
+  assertEquals(response.headers.getSetCookie().length, 2);
+});
+
+Deno.test("accepts case-insensitive Bearer schemes and strips Proxy-Connection", async () => {
+  let upstreamRequest: Request | undefined;
+  const handler = createBunnyTunnelHandler({
+    config: config({ viewerTokens: ["secret"] }),
+    fetcher: (input, init) => {
+      upstreamRequest = input instanceof Request
+        ? input
+        : new Request(input, init);
+      return Promise.resolve(new Response("ok"));
+    },
+  });
+  const response = await handler(
+    new Request("https://edge.example/", {
+      headers: {
+        authorization: "bEaReR secret",
+        "proxy-connection": "keep-alive",
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assert(upstreamRequest, "Expected upstream request");
+  assertEquals(upstreamRequest.headers.get("proxy-connection"), null);
+});
+
+Deno.test("rejects invalid signatures before reading request bodies", async () => {
+  let pulls = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulls += 1;
+      controller.enqueue(new TextEncoder().encode("body"));
+      controller.close();
+    },
+  });
+  const request = new Request("https://origin.example/path", {
+    body,
+    headers: {
+      "x-bunny-tunnel-version": "v2",
+      "x-bunny-tunnel-origin": "https://origin.example",
+      "x-bunny-tunnel-timestamp": "1782475200",
+      "x-bunny-tunnel-nonce": "0".repeat(32),
+      "x-bunny-tunnel-body-sha256": "0".repeat(64),
+      "x-bunny-tunnel-signature": `v2=${"0".repeat(64)}`,
+    },
+    method: "POST",
+  });
+  await Promise.resolve();
+  const pullsBeforeVerification = pulls;
+  const valid = await verifyBunnyTunnelSignature(request, "origin-secret", {
+    now: () => new Date("2026-06-26T12:00:00Z"),
+  });
+  assertEquals(valid, false);
+  assertEquals(pulls, pullsBeforeVerification);
+});
+
+Deno.test("times out stalled request uploads", async () => {
+  const body = new ReadableStream<Uint8Array>({ pull() {} });
+  const handler = createBunnyTunnelHandler({
+    config: config({ requestTimeoutMs: 10 }),
+    fetcher: () => Promise.resolve(new Response("unexpected")),
+  });
+  const response = await handler(
+    new Request("https://edge.example/", { body, method: "POST" }),
+  );
+  assertEquals(response.status, 504);
+});

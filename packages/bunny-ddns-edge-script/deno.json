@@ -15,6 +15,7 @@
     "include": [
       "LICENSE",
       "README.md",
+      ".env.example",
       "src/app.d.ts",
       "src/app.js",
       "src/mod.ts"

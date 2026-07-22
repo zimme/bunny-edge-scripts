@@ -41,7 +41,7 @@ script file for deploy paths that upload a single script.
 To create a personal deployment repo, use the scaffold generator:
 
 ```sh
-deno create jsr:@zimme/create-bunny-ddns my-bunny-ddns
+deno create jsr:@zimme/create-bunny-ddns -- my-bunny-ddns
 ```
 
 The npm compatibility entrypoint also works:
@@ -278,34 +278,36 @@ the response has one line per hostname.
 GET https://<your-script-host>/checkip
 ```
 
-This returns the detected client IP as plain text. It does not require
+This returns the first valid address found in common forwarding headers. Bunny
+does not document which client-address header it sanitizes, so verify this
+endpoint on your deployed script before relying on it. It does not require
 authentication, but it still requires HTTPS unless local insecure mode is
-enabled. Use it as the discovery step for clients that cannot determine their
-public IP locally.
+enabled. Updates never use these headers as the DNS value.
 
 ## Required Bunny Secrets
 
 Configure these on the Bunny Edge Script under Env Configuration. Use Bunny
 secrets for sensitive values.
 
-| Name                       | Required | Description                                                                                                                                            |
-| -------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `BUNNY_API_KEY`            | Yes      | Bunny account API key used by the script to list and mutate DNS records. `BUNNY_ACCESS_KEY` is also accepted.                                          |
-| `DDNS_SHARED_SECRET`       | Yes      | Password inadyn sends through HTTP Basic Auth.                                                                                                         |
-| `DDNS_SHARED_SECRETS`      | No       | Comma-separated secrets for rotation. Overrides `DDNS_SHARED_SECRET` when set.                                                                         |
-| `DDNS_USERNAME`            | No       | Require a specific Basic Auth username. If omitted, any username is accepted when the password is valid.                                               |
-| `DDNS_ALLOWED_HOSTS`       | No       | Comma-separated exact or wildcard host patterns, for example `home.example.com,*.home.example.net`. Empty means any hostname in available Bunny zones. |
-| `DDNS_DENIED_HOSTS`        | No       | Comma-separated exact or wildcard host patterns. Deny wins.                                                                                            |
-| `DDNS_ALLOWED_ZONES`       | No       | Comma-separated zone patterns, for example `example.com,*.example.net`. Empty means any available Bunny zone.                                          |
-| `DDNS_DENIED_ZONES`        | No       | Comma-separated zone patterns. Deny wins.                                                                                                              |
-| `DDNS_AUTO_CREATE`         | No       | Default `true`. Set `false` to update existing records only.                                                                                           |
-| `DDNS_TTL`                 | No       | Default `900`. TTL used for records created by the script.                                                                                             |
-| `DDNS_MULTI_RECORD_MODE`   | No       | Default `reject`. Set `update-all` to update every matching record with the same hostname/type.                                                        |
-| `DDNS_MAX_HOSTNAMES`       | No       | Default `25`. Maximum hostnames accepted in one update request.                                                                                        |
-| `DDNS_MAX_MUTATIONS`       | No       | Default and maximum `40`. Rejects requests that could exceed Bunny's per-request subrequest budget.                                                    |
-| `DDNS_RECORD_COMMENT`      | No       | Comment used for newly created DNS records.                                                                                                            |
-| `DDNS_ALLOW_INSECURE_HTTP` | No       | Default `false`. Set `true` only for local development.                                                                                                |
-| `DDNS_API_BASE_URL`        | No       | Default `https://api.bunny.net`. Mostly useful for tests.                                                                                              |
+| Name                       | Required | Description                                                                                                   |
+| -------------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
+| `BUNNY_API_KEY`            | Yes      | Bunny account API key used by the script to list and mutate DNS records. `BUNNY_ACCESS_KEY` is also accepted. |
+| `DDNS_SHARED_SECRET`       | Yes      | Password inadyn sends through HTTP Basic Auth.                                                                |
+| `DDNS_SHARED_SECRETS`      | No       | Comma-separated secrets for rotation. Overrides `DDNS_SHARED_SECRET` when set.                                |
+| `DDNS_USERNAME`            | No       | Require a specific Basic Auth username. If omitted, any username is accepted when the password is valid.      |
+| `DDNS_ALLOWED_HOSTS`       | No       | Comma-separated exact or wildcard host patterns, for example `home.example.com,*.home.example.net`.           |
+| `DDNS_DENIED_HOSTS`        | No       | Comma-separated exact or wildcard host patterns. Deny wins.                                                   |
+| `DDNS_ALLOWED_ZONES`       | No       | Comma-separated zone patterns, for example `example.com,*.example.net`.                                       |
+| `DDNS_DENIED_ZONES`        | No       | Comma-separated zone patterns. Deny wins.                                                                     |
+| `DDNS_ALLOW_ALL_HOSTS`     | No       | Default `false`. Set `true` only to explicitly grant access to every discovered Bunny zone.                   |
+| `DDNS_AUTO_CREATE`         | No       | Default `true`. Set `false` to update existing records only.                                                  |
+| `DDNS_TTL`                 | No       | Default `900`. TTL used for records created by the script.                                                    |
+| `DDNS_MULTI_RECORD_MODE`   | No       | Default `reject`. Set `update-all` to update every matching record with the same hostname/type.               |
+| `DDNS_MAX_HOSTNAMES`       | No       | Default `25`. Maximum hostnames accepted in one update request.                                               |
+| `DDNS_MAX_MUTATIONS`       | No       | Default and maximum `40`. Rejects requests that could exceed Bunny's per-request subrequest budget.           |
+| `DDNS_RECORD_COMMENT`      | No       | Comment used for newly created DNS records.                                                                   |
+| `DDNS_ALLOW_INSECURE_HTTP` | No       | Default `false`. Set `true` only for local development.                                                       |
+| `DDNS_API_BASE_URL`        | No       | Default `https://api.bunny.net`. Mostly useful for tests.                                                     |
 
 ## Inadyn Example
 
@@ -454,12 +456,17 @@ artifact.
 - Update requests only use explicit IP query parameters, never forwarding
   headers, to choose the DNS target.
 - Deny lists override allow lists.
+- An allow list is required unless account-wide access is explicitly
+  acknowledged with `DDNS_ALLOW_ALL_HOSTS=true`.
 - Missing records are created only when `DDNS_AUTO_CREATE=true`.
 - Multiple existing records for the same hostname and IP family are rejected by
   default. This avoids accidentally flattening a Bunny DNS weighted or smart
   record set into one dynamic address.
 - Mutation requests are preflighted against Bunny Edge Scripting's 50 subrequest
   limit before any DNS record is changed.
+- Zone discovery is bounded to 10,000 zones to preserve that subrequest budget.
+- Multi-record and dual-stack changes are not transactional; a later Bunny API
+  failure can leave earlier mutations applied even when the response is `911`.
 
 This project does not implement DNS TXT proof by default. The script already has
 the Bunny API key, so a TXT-token flow adds setup work without meaningfully

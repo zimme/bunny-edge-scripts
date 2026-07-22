@@ -67,6 +67,7 @@ const HOP_BY_HOP_HEADERS = new Set([
   "keep-alive",
   "proxy-authenticate",
   "proxy-authorization",
+  "proxy-connection",
   "te",
   "trailer",
   "transfer-encoding",
@@ -85,7 +86,7 @@ const DEFAULT_ALLOWED_METHODS = [
 
 const DEFAULT_HEALTH_PATH = "/__bunny_tunnel/healthz";
 const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024;
-const MAX_BODY_BYTES = 32 * 1024 * 1024;
+const MAX_BODY_BYTES = 10 * 1024 * 1024;
 const DEFAULT_SIGNATURE_TOLERANCE_SECONDS = 300;
 const MAX_SIGNATURE_TOLERANCE_SECONDS = 3600;
 const MAX_REPLAY_CACHE_ENTRIES = 10_000;
@@ -116,7 +117,7 @@ export function readBunnyTunnelConfigFromEnv(env: EnvReader): RuntimeConfig {
     env.get("TUNNEL_ALLOWED_METHODS"),
   ).map((method) => method.toUpperCase());
 
-  return {
+  const config = {
     routes,
     allowPublic,
     viewerTokens,
@@ -147,6 +148,8 @@ export function readBunnyTunnelConfigFromEnv(env: EnvReader): RuntimeConfig {
       "TUNNEL_REQUEST_TIMEOUT_MS",
     ),
   };
+  normalizeConfig(config);
+  return config;
 }
 
 export function createBunnyTunnelHandler(
@@ -213,24 +216,36 @@ async function handleRequest(
     return textResponse("no route\n", 404);
   }
 
-  const bodyResult = await readRequestBody(request, config.maxBodyBytes);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+  let bodyResult;
+  try {
+    bodyResult = await readRequestBody(
+      request,
+      config.maxBodyBytes,
+      controller.signal,
+    );
+  } catch (error) {
+    clearTimeout(timeout);
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return textResponse("gateway timeout\n", 504);
+    }
+    throw error;
+  }
   if (bodyResult.kind === "too-large") {
+    clearTimeout(timeout);
     return textResponse("request body too large\n", 413);
   }
   const body = bodyResult.body;
 
-  const headers = await buildUpstreamHeaders({
-    body,
-    config,
-    now,
-    request,
-    selected,
-  });
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
-
   try {
+    const headers = await buildUpstreamHeaders({
+      body,
+      config,
+      now,
+      request,
+      selected,
+    });
     const upstreamResponse = await fetcher(selected.targetUrl, {
       body,
       headers,
@@ -239,20 +254,22 @@ async function handleRequest(
       signal: controller.signal,
     });
 
-    return new Response(upstreamResponse.body, {
-      headers: responseHeaders(upstreamResponse.headers),
-      status: upstreamResponse.status,
-      statusText: upstreamResponse.statusText,
-    });
+    return new Response(
+      deadlineBody(upstreamResponse.body, controller, timeout),
+      {
+        headers: responseHeaders(upstreamResponse.headers),
+        status: upstreamResponse.status,
+        statusText: upstreamResponse.statusText,
+      },
+    );
   } catch (error) {
+    clearTimeout(timeout);
     if (error instanceof DOMException && error.name === "AbortError") {
       return textResponse("gateway timeout\n", 504);
     }
 
     console.error("[bunny-tunnel-edge-script] upstream request failed", error);
     return textResponse("bad gateway\n", 502);
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -350,21 +367,6 @@ export async function verifyBunnyTunnelSignature(
     return false;
   }
 
-  let body = options.body;
-  if (body && body.byteLength > maxBodyBytes) {
-    return false;
-  }
-  if (!body) {
-    const bodyResult = await readRequestBody(request.clone(), maxBodyBytes);
-    if (bodyResult.kind === "too-large") {
-      return false;
-    }
-    body = bodyResult.body ?? new ArrayBuffer(0);
-  }
-  if (!timingSafeEqual(await sha256Hex(body), bodyHash)) {
-    return false;
-  }
-
   const url = new URL(request.url);
   let expectedOrigin: string;
   try {
@@ -393,6 +395,21 @@ export async function verifyBunnyTunnelSignature(
     return false;
   }
 
+  let body = options.body;
+  if (body && body.byteLength > maxBodyBytes) {
+    return false;
+  }
+  if (!body) {
+    const bodyResult = await readRequestBody(request.clone(), maxBodyBytes);
+    if (bodyResult.kind === "too-large") {
+      return false;
+    }
+    body = bodyResult.body ?? new ArrayBuffer(0);
+  }
+  if (!timingSafeEqual(await sha256Hex(body), bodyHash)) {
+    return false;
+  }
+
   const expiresAtSeconds = timestampSeconds + tolerance;
   try {
     return options.replayCache
@@ -406,6 +423,9 @@ export async function verifyBunnyTunnelSignature(
 function readRoutes(env: EnvReader): TunnelRoute[] {
   const routesJson = optionalString(env.get("TUNNEL_ROUTES"));
   if (routesJson) {
+    if (new TextEncoder().encode(routesJson).byteLength > 2048) {
+      throw new Error("TUNNEL_ROUTES exceeds Bunny's 2 KB environment limit.");
+    }
     const parsed = JSON.parse(routesJson) as unknown;
     if (!Array.isArray(parsed)) {
       throw new Error("TUNNEL_ROUTES must be a JSON array.");
@@ -432,8 +452,18 @@ function readRoute(value: unknown): TunnelRoute {
   }
 
   const route = value as Record<string, unknown>;
-  if (typeof route.origin !== "string") {
+  const allowedKeys = new Set(["origin", "host", "pathPrefix"]);
+  if (Object.keys(route).some((key) => !allowedKeys.has(key))) {
+    throw new Error("TUNNEL_ROUTES entries contain an unknown property.");
+  }
+  if (typeof route.origin !== "string" || !route.origin.trim()) {
     throw new Error("Each TUNNEL_ROUTES entry needs an origin string.");
+  }
+  if ("host" in route && typeof route.host !== "string") {
+    throw new Error("TUNNEL_ROUTES host must be a string.");
+  }
+  if ("pathPrefix" in route && typeof route.pathPrefix !== "string") {
+    throw new Error("TUNNEL_ROUTES pathPrefix must be a string.");
   }
 
   return {
@@ -455,18 +485,46 @@ function normalizeConfig(
   const allowedMethods = config.allowedMethods.length > 0
     ? config.allowedMethods.map((method) => method.toUpperCase())
     : DEFAULT_ALLOWED_METHODS;
+  if (
+    allowedMethods.some((method) => !/^[A-Z]+$/.test(method)) ||
+    !Number.isSafeInteger(config.maxBodyBytes) || config.maxBodyBytes < 1 ||
+    config.maxBodyBytes > MAX_BODY_BYTES ||
+    !Number.isSafeInteger(config.requestTimeoutMs) ||
+    config.requestTimeoutMs < 1 || config.requestTimeoutMs > 120000
+  ) {
+    throw new Error("Invalid tunnel method, body, or timeout configuration.");
+  }
+
+  const routes = config.routes.map((route) =>
+    normalizeRoute(route, config.allowInsecureOrigin)
+  );
+  const routeKeys = new Set<string>();
+  for (const route of routes) {
+    const key = `${route.host ?? "*"}\n${route.pathPrefix}`;
+    if (routeKeys.has(key)) {
+      throw new Error(
+        "Tunnel routes must not have duplicate host/path matches.",
+      );
+    }
+    routeKeys.add(key);
+  }
 
   return {
     ...config,
     allowedMethods,
-    deniedPathPrefixes: config.deniedPathPrefixes.map(normalizePath),
-    healthPath: normalizePath(config.healthPath),
-    routes: config.routes.map((route) =>
-      normalizeRoute(route, config.allowInsecureOrigin)
-    ).sort((a, b) => {
-      const hostScore = Number(Boolean(b.host)) - Number(Boolean(a.host));
+    deniedPathPrefixes: config.deniedPathPrefixes.map(normalizeSecurePath),
+    healthPath: normalizeSecurePath(config.healthPath),
+    routes: routes.sort((a, b) => {
+      const hostScore = hostSpecificity(b.host) - hostSpecificity(a.host);
       if (hostScore !== 0) {
         return hostScore;
+      }
+
+      if (a.host?.startsWith("*.") && b.host?.startsWith("*.")) {
+        const suffixScore = b.host.length - a.host.length;
+        if (suffixScore !== 0) {
+          return suffixScore;
+        }
       }
 
       return b.pathPrefix.length - a.pathPrefix.length;
@@ -493,9 +551,11 @@ function normalizeRoute(
   }
 
   return {
-    host: route.host ? normalizeHost(route.host) : undefined,
+    host: route.host === undefined
+      ? undefined
+      : normalizeHostPattern(route.host),
     origin,
-    pathPrefix: normalizePath(route.pathPrefix ?? "/"),
+    pathPrefix: normalizeSecurePath(route.pathPrefix ?? "/"),
   };
 }
 
@@ -554,7 +614,8 @@ function pathMatches(pathname: string, prefix: string): boolean {
     return true;
   }
 
-  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+  return pathname === prefix || pathname.startsWith(`${prefix}/`) ||
+    pathname.startsWith(`${prefix};`);
 }
 
 function isDeniedPath(pathname: string, deniedPrefixes: string[]): boolean {
@@ -572,12 +633,11 @@ function isViewerAuthorized(request: Request, viewerTokens: string[]): boolean {
   }
 
   const authorization = request.headers.get("authorization") ?? "";
-  const bearerPrefix = "Bearer ";
-  if (!authorization.startsWith(bearerPrefix)) {
+  const match = authorization.match(/^([^ ]+) ([^ ]+)$/);
+  if (!match || match[1].toLowerCase() !== "bearer") {
     return false;
   }
-
-  const token = authorization.slice(bearerPrefix.length);
+  const token = match[2];
   return viewerTokens.some((knownToken) => timingSafeEqual(token, knownToken));
 }
 
@@ -617,7 +677,12 @@ function responseHeaders(input: Headers): Headers {
       continue;
     }
 
-    headers.set(name, value);
+    if (normalized !== "set-cookie") {
+      headers.append(name, value);
+    }
+  }
+  for (const cookie of input.getSetCookie()) {
+    headers.append("set-cookie", cookie);
   }
 
   return headers;
@@ -694,8 +759,43 @@ function normalizePath(pathname: string): string {
   return prefixed.length > 1 ? trimTrailingSlash(prefixed) : prefixed;
 }
 
+function normalizeSecurePath(pathname: string): string {
+  const canonical = canonicalPathnameForSecurity(normalizePath(pathname));
+  if (!canonical) {
+    throw new Error(`Invalid tunnel path: ${pathname}`);
+  }
+  return canonical;
+}
+
 function normalizeHost(host: string): string {
   return host.trim().toLowerCase().replace(/\.$/, "");
+}
+
+function normalizeHostPattern(host: string): string {
+  const normalized = normalizeHost(host);
+  const wildcard = normalized.startsWith("*.");
+  const hostname = wildcard ? normalized.slice(2) : normalized;
+  if (
+    !hostname || hostname.includes(":") || hostname.includes("*") ||
+    !/^[a-z0-9.-]+$/.test(hostname)
+  ) {
+    throw new Error(`Invalid tunnel route host: ${host}`);
+  }
+  let parsed: string;
+  try {
+    parsed = new URL(`https://${hostname}`).hostname;
+  } catch {
+    throw new Error(`Invalid tunnel route host: ${host}`);
+  }
+  if (parsed !== hostname || parsed.split(".").some((label) => !label)) {
+    throw new Error(`Invalid tunnel route host: ${host}`);
+  }
+  return wildcard ? `*.${parsed}` : parsed;
+}
+
+function hostSpecificity(host: string | undefined): number {
+  if (!host) return 0;
+  return host.startsWith("*.") ? 1 : 2;
 }
 
 function trimTrailingSlash(value: string): string {
@@ -746,7 +846,7 @@ function canonicalPathnameForSecurity(pathname: string): string | undefined {
         return undefined;
       }
     }
-    return decoded;
+    return decoded.replace(/\/{2,}/g, "/");
   } catch {
     return undefined;
   }
@@ -781,6 +881,7 @@ function consumeReplayNonce(
 async function readRequestBody(
   request: Request,
   maxBytes: number,
+  signal?: AbortSignal,
 ): Promise<
   { kind: "ok"; body: ArrayBuffer | undefined } | { kind: "too-large" }
 > {
@@ -800,7 +901,14 @@ async function readRequestBody(
   const chunks: Uint8Array[] = [];
   let total = 0;
   while (true) {
-    const { done, value } = await reader.read();
+    let result: ReadableStreamReadResult<Uint8Array>;
+    try {
+      result = await readWithAbort(reader, signal);
+    } catch (error) {
+      await reader.cancel().catch(() => {});
+      throw error;
+    }
+    const { done, value } = result;
     if (done) {
       break;
     }
@@ -820,6 +928,61 @@ async function readRequestBody(
     offset += chunk.byteLength;
   }
   return { kind: "ok", body: body.buffer };
+}
+
+async function readWithAbort(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal?: AbortSignal,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (!signal) return await reader.read();
+  if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+  return await new Promise((resolve, reject) => {
+    const onAbort = () => reject(new DOMException("Aborted", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    reader.read().then(
+      (result) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(result);
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+function deadlineBody(
+  body: ReadableStream<Uint8Array> | null,
+  controller: AbortController,
+  timeout: ReturnType<typeof setTimeout>,
+): ReadableStream<Uint8Array> | null {
+  if (!body) {
+    clearTimeout(timeout);
+    return null;
+  }
+  const reader = body.getReader();
+  return new ReadableStream({
+    async pull(streamController) {
+      try {
+        const result = await readWithAbort(reader, controller.signal);
+        if (result.done) {
+          clearTimeout(timeout);
+          streamController.close();
+        } else {
+          streamController.enqueue(result.value);
+        }
+      } catch (error) {
+        clearTimeout(timeout);
+        streamController.error(error);
+      }
+    },
+    async cancel(reason) {
+      clearTimeout(timeout);
+      controller.abort();
+      await reader.cancel(reason);
+    },
+  });
 }
 
 function timingSafeEqual(a: string, b: string): boolean {

@@ -49,6 +49,7 @@
  * @property {string[]} deniedHosts
  * @property {string[]} allowedZones
  * @property {string[]} deniedZones
+ * @property {boolean} allowAllHosts
  * @property {boolean} autoCreate
  * @property {number} defaultTtl
  * @property {boolean} allowInsecureHttp
@@ -196,6 +197,7 @@ export const DNS_RECORD_TYPE_AAAA: 1;
  * @property {string[]} deniedHosts
  * @property {string[]} allowedZones
  * @property {string[]} deniedZones
+ * @property {boolean} allowAllHosts
  * @property {boolean} autoCreate
  * @property {number} defaultTtl
  * @property {boolean} allowInsecureHttp
@@ -321,6 +323,7 @@ export type RuntimeConfig = {
   deniedHosts: string[];
   allowedZones: string[];
   deniedZones: string[];
+  allowAllHosts: boolean;
   autoCreate: boolean;
   defaultTtl: number;
   allowInsecureHttp: boolean;

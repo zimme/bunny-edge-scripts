@@ -1,4 +1,4 @@
-# bunny-ddns-edge-script
+# @zimme/bunny-ddns-edge-script
 
 Secure DynDNS-compatible update handler for bunny.net Edge Scripts.
 
@@ -16,3 +16,6 @@ deno add npm:@zimme/bunny-ddns-edge-script
 
 See the repository README for full deployment, inadyn, and security
 configuration instructions.
+
+Configure `DDNS_ALLOWED_HOSTS` or `DDNS_ALLOWED_ZONES`. Account-wide access is
+available only through the explicit `DDNS_ALLOW_ALL_HOSTS=true` acknowledgement.

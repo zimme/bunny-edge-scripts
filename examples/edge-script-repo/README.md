@@ -28,6 +28,8 @@ If you use the GitHub Action deployment instead, this example workflow builds
 the same generated file and uploads it with `BunnyWay/actions/deploy-script`. It
 runs `deno install` before building because `script.ts` imports
 `@zimme/bunny-ddns-edge-script` through the Deno import map in `deno.json`.
+Create a protected `production` GitHub environment and add `SCRIPT_ID` and
+`DEPLOY_KEY` as environment secrets before running that workflow.
 
 Bunny can run a self-contained `script.ts` directly, but this example imports
 `@zimme/bunny-ddns-edge-script` from JSR through Deno. The build step exists
@@ -42,5 +44,7 @@ Set at least:
 
 - `BUNNY_API_KEY`
 - `DDNS_SHARED_SECRET`
+- `DDNS_ALLOWED_HOSTS` or `DDNS_ALLOWED_ZONES`; alternatively set
+  `DDNS_ALLOW_ALL_HOSTS=true` only for intentionally account-wide access.
 
 See the root project README for all optional security controls.

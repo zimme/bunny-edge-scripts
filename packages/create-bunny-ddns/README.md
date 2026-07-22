@@ -6,7 +6,7 @@ bunny.net Edge Scripting.
 Preferred Deno usage:
 
 ```sh
-deno create jsr:@zimme/create-bunny-ddns my-bunny-ddns
+deno create jsr:@zimme/create-bunny-ddns -- my-bunny-ddns
 ```
 
 The generator resolves the runtime dependency and creates a committed-ready
@@ -17,6 +17,10 @@ npm compatibility:
 ```sh
 npm exec @zimme/create-bunny-ddns
 ```
+
+The npm command still requires Deno 2.9.3 or later on `PATH`; npm is an
+alternate distribution channel, while Deno remains the generator and Edge Script
+toolchain.
 
 With npm's initializer shorthand, this package is also reachable as
 `npm init @zimme/bunny-ddns`.

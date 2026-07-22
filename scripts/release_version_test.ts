@@ -1,4 +1,7 @@
-import { assertReleaseVersion } from "./release_version.ts";
+import {
+  assertReleaseVersion,
+  compareReleaseVersions,
+} from "./release_version.ts";
 import { isReleaseWorkflowTag } from "./pre_push.ts";
 
 function assertAccepted(version: string): void {
@@ -45,5 +48,26 @@ Deno.test("identifies tags that can trigger the release workflow", () => {
     if (isReleaseWorkflowTag(tag)) {
       throw new Error(`Expected ${tag} not to be treated as a release tag.`);
     }
+  }
+});
+
+Deno.test("orders stable and prerelease versions using SemVer precedence", () => {
+  const ordered = [
+    "1.0.0-alpha",
+    "1.0.0-alpha.1",
+    "1.0.0-beta.2",
+    "1.0.0-beta.11",
+    "1.0.0-rc.1",
+    "1.0.0",
+    "1.0.1",
+    "2.0.0",
+  ];
+  for (let index = 1; index < ordered.length; index += 1) {
+    if (compareReleaseVersions(ordered[index - 1], ordered[index]) >= 0) {
+      throw new Error("Expected release versions to be strictly increasing.");
+    }
+  }
+  if (compareReleaseVersions("1.0.0", "1.0.0") !== 0) {
+    throw new Error("Expected identical versions to compare equally.");
   }
 });

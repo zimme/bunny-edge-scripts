@@ -20,6 +20,10 @@ deno task ci
 | Build command   | `deno task build`     |
 | Entry file      | `generated/script.ts` |
 
+The included GitHub deployment workflow is an alternative to Bunny Git. Create a
+protected `production` GitHub environment and add `SCRIPT_ID` and `DEPLOY_KEY`
+as environment secrets before running it.
+
 ## Bunny Runtime Env
 
 Set these in Bunny Edge Script Env Configuration:
@@ -54,6 +58,8 @@ For multiple routes, set `TUNNEL_ROUTES` to JSON:
   }
 ]
 ```
+
+The JSON value must remain within Bunny's 2 KB environment-value limit.
 
 Do not commit real secrets to this repo.
 

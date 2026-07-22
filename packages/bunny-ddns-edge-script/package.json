@@ -35,6 +35,7 @@
     "dist/app.js",
     "dist/mod.d.ts",
     "dist/mod.js",
+    ".env.example",
     "README.md",
     "LICENSE"
   ],

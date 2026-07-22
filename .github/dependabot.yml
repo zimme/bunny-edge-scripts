@@ -1,5 +1,17 @@
 version: 2
 updates:
+  - package-ecosystem: "deno"
+    directory: "/"
+    commit-message:
+      prefix: "build(deps)"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/"
+    commit-message:
+      prefix: "build(deps)"
+    schedule:
+      interval: "weekly"
   - package-ecosystem: "devcontainers"
     directory: "/"
     commit-message:
@@ -10,6 +22,10 @@ updates:
     directory: "/"
     commit-message:
       prefix: "ci(deps)"
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"
     schedule:
       interval: "weekly"
   - package-ecosystem: "github-actions"

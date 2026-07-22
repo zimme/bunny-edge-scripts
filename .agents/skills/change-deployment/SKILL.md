@@ -19,7 +19,8 @@ description: Modify or review Dev Container, Docker Compose, GitHub Actions, Bun
 6. Treat Conventional Commits as release-note input. Use
    `npm run release:prepare` for lockstep versions and validation, then
    `npm run release:tag` only after merge. Only an explicitly pushed SemVer tag
-   may publish; generated changelogs remain uncommitted release artifacts.
+   that is increasing, annotated, signed, and GitHub-verified may publish;
+   generated changelogs remain uncommitted release artifacts.
 7. Test a fresh cache volume when changing container lifecycle or permissions.
 8. Run `npm run validate` inside the Dev Container and inspect all JSR and npm
    dry-run contents.
