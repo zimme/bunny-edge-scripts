@@ -5,6 +5,8 @@ services:
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
+      cache_from:
+        - ${DEVCONTAINER_CACHE_FROM:-ghcr.io/zimme/bunny-edge-scripts-devcontainer:latest}
       args:
         DENO_VERSION: "2.9.3"
     command: sleep infinity

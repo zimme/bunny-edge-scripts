@@ -393,10 +393,23 @@ npm run devcontainer:down
 
 The container pins Deno, Node, npm, GitHub CLI, and GitHub Copilot CLI versions.
 Its Dev Container Features are also pinned by
-`.devcontainer/devcontainer-lock.json`. Docker Compose currently starts only the
-workspace service because the project has no database, queue, or other required
-service. Add future dependencies as Compose services so local development and CI
-continue to use the same topology.
+`.devcontainer/devcontainer-lock.json`. The `Dev Container` workflow publishes
+the resulting image to GHCR as `latest` and with an immutable commit tag
+whenever its definition or pinned tools change on `main`. Local development, CI,
+release jobs, and coding agents use that image as a build cache while still
+building from the checked-in Compose and Dev Container definitions. A missing
+cache therefore falls back to the same reproducible build instead of changing
+behavior.
+
+GitHub creates the container package as private on its first publication. The
+repository workflows authenticate with their scoped `GITHUB_TOKEN`, so they can
+use it immediately. After the first successful `Dev Container` workflow run,
+make `bunny-edge-scripts-devcontainer` public in its GitHub package settings to
+allow anonymous local and fork builds to use the cache as well.
+
+Docker Compose currently starts only the workspace service because the project
+has no database, queue, or other required service. Add future dependencies as
+Compose services so local development and CI continue to use the same topology.
 
 Inside the container, the normal commands are:
 
@@ -418,6 +431,9 @@ Agent-wide project guidance lives in `AGENTS.md`. Focused workflows use the open
 Agent Skills format under `.agents/skills/`, with compatibility shims for GitHub
 Copilot, Claude Code, and Gemini CLI. Run `npm run agents:check` to validate
 instruction imports, skill metadata, UI metadata, and skill-directory symlinks.
+GitHub's special `copilot-setup-steps.yml` workflow runs for coding-agent tasks;
+its normal push and pull-request triggers are intentionally limited to changes
+to that workflow so they validate the bootstrap without duplicating CI.
 
 Host-side Deno commands remain available as a fallback. Use `deno install` when
 intentionally updating dependencies and `deno ci` for a frozen install from the

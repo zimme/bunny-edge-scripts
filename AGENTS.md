@@ -26,7 +26,9 @@ npm run devcontainer:down
 ```
 
 When already inside the container, run commands directly. The GitHub Copilot
-setup workflow starts the same container before the coding agent begins.
+setup workflow starts the same container before the coding agent begins. CI,
+release jobs, and coding agents use the GHCR prebuild as a cache; the checked-in
+Dev Container and Compose files remain authoritative.
 
 Use root npm scripts as the stable command interface. They delegate project work
 to Deno while retaining npm publication support:
@@ -110,7 +112,8 @@ references. Say explicitly when no findings remain and name residual test gaps.
   guard.
 - `.devcontainer/`: shared local, CI, Codespaces, and agent environment.
 - `.agents/skills/`: discoverable task-specific Agent Skills.
-- `.github/workflows/`: thin CI, security, agent setup, and release wrappers.
+- `.github/workflows/`: thin CI, Dev Container prebuild, security, agent setup,
+  and release wrappers.
 
 ## Task skills
 

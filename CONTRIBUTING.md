@@ -24,7 +24,10 @@ npm run validate
 ```
 
 `npm run validate` is exactly what CI runs. The Compose definition is the place
-to add any future service dependency needed by tests or development.
+to add any future service dependency needed by tests or development. A GHCR
+prebuild accelerates local and hosted builds, but is only a cache: checked-in
+Dev Container changes are always applied even before a new prebuild is
+published.
 
 Package `dist/` directories are generated from package `src/` directories and
 are gitignored. Do not edit them by hand. Change source files, run

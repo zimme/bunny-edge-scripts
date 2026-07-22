@@ -49,6 +49,7 @@
     "notfqdn",
     "numhost",
     "lockfiles",
+    "prebuild",
     "preflighted",
     "spoofable",
     "subrequest",
