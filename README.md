@@ -1,20 +1,33 @@
-# Bunny DDNS Edge Script
+# Bunny Edge Scripts
 
-A Deno-first project for securely updating Bunny DNS from standard dynamic DNS
-clients without giving those clients your Bunny account API key.
+A Deno-first, open-source collection of independently deployable
+[bunny.net Edge Scripts](https://bunny.net/edge-scripting/) and their supporting
+tools.
 
-## Packages
+Each edge script solves a distinct problem and can be installed and deployed on
+its own. The collection currently provides secure dynamic DNS for domains
+managed by bunny.net. More edge scripts can be added without making them
+dependencies of one another.
 
-| Package                                                            | Purpose                                                                                               | Use it when                                                                                   |
+## Edge Scripts
+
+| Edge script                                                        | Purpose                                                                                               | Use it when                                                                                   |
 | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | [`@zimme/bunny-ddns-edge-script`](packages/bunny-ddns-edge-script) | DynDNS-compatible API that updates Bunny DNS without exposing your Bunny account key to DDNS clients. | A router, NAS, or inadyn client must keep a hostname pointed at a changing public IP address. |
-| [`@zimme/create-bunny-ddns`](packages/create-bunny-ddns)           | Generates and validates a minimal personal deployment repository for the DDNS package.                | You want the simplest GitOps setup for Bunny DDNS.                                            |
 
-The runtime package powers the deployed Edge Script. The generator creates the
-small, user-owned Git repository that imports and deploys that runtime package.
-Neither package provides a reverse tunnel or NAT traversal; use DDNS when your
-service is intentionally reachable through an inbound port and its public IP
-address can change.
+## Supporting Tools
+
+| Tool                                                     | Purpose                                                                               |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| [`@zimme/create-bunny-ddns`](packages/create-bunny-ddns) | Generates and validates a minimal personal deployment repository for the DDNS script. |
+
+The DDNS runtime package powers the deployed Edge Script. Its generator creates
+a small, user-owned Git repository that imports and deploys that runtime
+package. The generator is development tooling; it does not run on bunny.net.
+
+The DDNS script is not a reverse tunnel and does not provide NAT traversal. Use
+it when your service is intentionally reachable through an inbound port but its
+public IP address can change.
 
 ## Why DDNS
 
