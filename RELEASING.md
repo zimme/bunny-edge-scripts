@@ -30,7 +30,7 @@ job receives contents write access but no OIDC.
    Review.
 2. Choose the next version from the Conventional Commits since the previous
    release.
-3. Run `npm run release:prepare -- 1.0.0`, replacing `1.0.0` with the chosen
+3. Run `deno task release:prepare 1.0.0`, replacing `1.0.0` with the chosen
    version. It requires a clean worktree, updates all seven manifests, and runs
    the complete validation suite.
 4. Review all seven manifest changes.
@@ -42,7 +42,7 @@ job receives contents write access but no OIDC.
 
    ```sh
    git fetch origin main
-   npm run release:tag -- 1.0.0
+   deno task release:tag 1.0.0
    git push origin 1.0.0
    ```
 
@@ -50,11 +50,11 @@ job receives contents write access but no OIDC.
    exactly matches the root version plus every JSR and npm package version.
 8. Verify all three packages on JSR and npm and inspect the GitHub release.
 
-Git has no native pre-tag hook. `npm run release:tag` is the repository's safe
+Git has no native pre-tag hook. `deno task release:tag` is the repository's safe
 tag-creation interface: it checks the clean worktree, branch, remote commit,
 manifest versions, and existing tags before invoking `git tag -s`. Running
-`npm run setup` installs the tracked `.githooks/pre-push` guard. The guard does
-not mutate commits; it rejects release tags that are malformed, unsigned,
+`deno task setup` installs the tracked `.githooks/pre-push` guard. The guard
+does not mutate commits; it rejects release tags that are malformed, unsigned,
 version-mismatched, or not reachable from the pushed `main` branch. The release
 workflow repeats the version and `origin/main` checks because local hooks can be
 bypassed.

@@ -28,7 +28,7 @@
       "version": "1.0.72"
     }
   },
-  "postCreateCommand": "sudo chown -R \"$(id -u):$(id -g)\" /deno-dir && npm run setup",
+  "postCreateCommand": "deno task setup",
   "customizations": {
     "vscode": {
       "extensions": [

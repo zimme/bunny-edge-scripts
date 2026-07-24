@@ -40,7 +40,7 @@ for (const packageInfo of packages) {
   if (await versionExists(npmVersionUrl)) {
     console.log(`npm ${packageInfo.name}@${version} already exists; skipping.`);
   } else {
-    await run("npm", ["publish", "--workspace", packageInfo.name]);
+    await run("npm", ["publish"], packageInfo.directory);
   }
 }
 
@@ -61,9 +61,14 @@ async function versionExists(url: string): Promise<boolean> {
   return true;
 }
 
-async function run(command: string, args: string[]): Promise<void> {
+async function run(
+  command: string,
+  args: string[],
+  cwd?: string,
+): Promise<void> {
   const status = await new Deno.Command(command, {
     args,
+    cwd,
     stderr: "inherit",
     stdout: "inherit",
   }).spawn().status;

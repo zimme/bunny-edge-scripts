@@ -192,12 +192,16 @@ deno task build
 deno task ci
 \`\`\`
 
-## Bunny Runtime Secrets
+## Bunny Runtime Configuration
 
-Set these in Bunny Edge Scripting Env Configuration:
+Unless the generator already provisioned the script, add these Environment
+Secrets in Bunny Edge Scripting Env Configuration:
 
 - \`BUNNY_API_KEY\`
 - \`DDNS_SHARED_SECRET\`
+
+Add these as Environment Variables:
+
 - \`DDNS_USERNAME\`
 - Optional: \`DDNS_ALLOWED_HOSTS\`
 - Optional: \`DDNS_ALLOWED_ZONES\`
@@ -250,17 +254,9 @@ This path keeps Bunny runtime credentials in Bunny, not GitHub.
 6. Deploy the script from Bunny.
 7. Point your DDNS hostname or custom script hostname at the deployed script.
 
-The official bunny.net CLI can also link this directory, deploy the built
-bundle, and manage Bunny-side configuration:
-
-\`\`\`sh
-bunny login
-bunny scripts link
-deno task build
-bunny scripts deploy generated/script.ts
-\`\`\`
-
-The CLI stores local script linkage under \`.bunny/\`, which this repo ignores.
+The generator can create the script and configure its secrets and variables
+when you provide a Bunny API key through its masked prompt. The key is used only
+in memory and is stored in Bunny as the script's \`BUNNY_API_KEY\` secret.
 `;
 }
 

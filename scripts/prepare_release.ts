@@ -5,7 +5,7 @@ import {
 
 const version = Deno.args[0]?.trim();
 if (!version || Deno.args.length !== 1) {
-  throw new Error("Usage: npm run release:prepare -- <version>");
+  throw new Error("Usage: deno task release:prepare <version>");
 }
 assertReleaseVersion(version);
 
@@ -19,8 +19,8 @@ if (await gitOutput(["tag", "--list", version])) {
 await setManifestVersions(version);
 console.log(`Set all package versions to ${version}. Running validation...`);
 
-const validation = await new Deno.Command("npm", {
-  args: ["run", "validate"],
+const validation = await new Deno.Command("deno", {
+  args: ["task", "validate"],
   stderr: "inherit",
   stdin: "inherit",
   stdout: "inherit",

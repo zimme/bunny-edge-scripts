@@ -25,6 +25,11 @@ toolchain.
 With npm's initializer shorthand, this package is also reachable as
 `npm init @zimme/bunny-ddns`.
 
-The generator does not ask for or store your Bunny API key or DDNS shared
-secret. It creates instructions for adding those values to Bunny Edge Script
-environment secrets, which keeps runtime credentials out of GitHub.
+In an interactive terminal, the generator optionally asks for your Bunny API key
+using a masked prompt. When provided, it creates the Edge Script, generates the
+DDNS shared secret, and configures Bunny environment secrets and variables. The
+API key is held only in memory and is never written to the generated repo.
+
+Leave the prompt empty, use `--yes`, or run non-interactively to skip automatic
+provisioning. The command then prints complete instructions for creating the
+script, connecting the GitHub repository, and configuring Bunny manually.

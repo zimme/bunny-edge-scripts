@@ -20,31 +20,34 @@ shared secret; Bunny API keys remain in the Edge Script environment.
 Use the Docker Compose-backed Dev Container for repository work. From the host:
 
 ```sh
-npm run devcontainer:up
-npm run devcontainer:exec -- <command>
-npm run devcontainer:down
+deno task devcontainer:up
+deno task devcontainer:exec <command>
+deno task devcontainer:down
 ```
 
 When already inside the container, run commands directly. The GitHub Copilot
 setup workflow starts the same container before the coding agent begins. CI,
 release jobs, and coding agents use the GHCR prebuild as a cache; the checked-in
-Dev Container and Compose files remain authoritative.
+Dev Container and Compose files remain authoritative. The Dockerfile installs
+the frozen dependency graph and prewarms the platform-specific bundler before
+source is mounted. Compose owns the GHCR `cache_from` setting; do not duplicate
+container or dependency caching in workflows.
 
-Use root npm scripts as the stable command interface. They delegate project work
-to Deno while retaining npm publication support:
+Use root Deno tasks as the stable command interface. npm exists only for npm
+package validation and publication:
 
 ```sh
-npm run setup
-npm run agents:check
-npm run fmt
-npm run lint
-npm run typecheck
-npm run test
-npm run build
-npm run validate
+deno task setup
+deno task agents:check
+deno task fmt
+deno task lint
+deno task check
+deno task test
+deno task build
+deno task validate
 ```
 
-`npm run validate` is the complete local and CI check. Do not invent CI-only
+`deno task validate` is the complete local and CI check. Do not invent CI-only
 commands; use `CI=true` when behavior genuinely needs to differ in CI.
 
 ## Engineering rules
@@ -80,7 +83,7 @@ commands; use `CI=true` when behavior genuinely needs to differ in CI.
 Before handing off a code or configuration change:
 
 1. Run focused tests while iterating.
-2. Run `npm run validate` inside the Dev Container.
+2. Run `deno task validate` inside the Dev Container.
 3. Review the final diff for regressions, generated files, secrets, and
    unrelated changes.
 4. Update `README.md`, package docs, examples, or security docs when their

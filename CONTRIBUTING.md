@@ -6,37 +6,39 @@ Thanks for helping keep this small and useful.
 
 Use the repository's Docker Compose-backed Dev Container. In VS Code or
 Codespaces, reopen the repository in the container. From a host with Docker,
-Node, and npm:
+Deno:
 
 ```sh
-npm run devcontainer:up
-npm run devcontainer:exec -- npm run validate
-npm run devcontainer:down
+deno task devcontainer:up
+deno task devcontainer:exec deno task validate
+deno task devcontainer:down
 ```
 
 Once inside the container:
 
 ```sh
-npm run setup
-npm run fmt
-npm run test
-npm run validate
+deno task setup
+deno task fmt
+deno task test
+deno task validate
 ```
 
-`npm run validate` is exactly what CI runs. The Compose definition is the place
-to add any future service dependency needed by tests or development. A GHCR
-prebuild accelerates local and hosted builds, but is only a cache: checked-in
-Dev Container changes are always applied even before a new prebuild is
-published.
+`deno task validate` is exactly what CI runs. The Compose definition is the
+place to add any future service dependency needed by tests or development. A
+GHCR prebuild accelerates local and hosted builds, but is only a cache:
+checked-in Dev Container changes are always applied even before a new prebuild
+is published. The Dockerfile caches the frozen Deno dependency graph and
+platform bundler in an image layer before source is mounted. Keep the Compose
+`cache_from` setting as the single container-cache source instead of adding
+workflow-only caches.
 
 Package `dist/` directories are generated from package `src/` directories and
 are gitignored. Do not edit them by hand. Change source files, run
 `deno task build` for a local package build, and rely on `prepack` scripts to
 refresh `dist/` during `npm pack` and `npm publish`.
 
-The npm scripts are the stable command interface for developers and automation;
-they delegate dependency installation, formatting, linting, typechecking,
-testing, and bundling to Deno tasks.
+Deno tasks are the stable command interface for developers and automation. npm
+is retained only for npm tarball validation and publication.
 
 ## Public API
 
@@ -63,9 +65,9 @@ communicate impact:
   themselves.
 
 Use an optional scope when it clarifies ownership, for example
-`fix(ddns): reject ambiguous record sets`. Run `npm run commits:check` locally.
-Maintainers prepare all manifest versions and validation together with
-`npm run release:prepare -- <version>` in a dedicated release commit. Do not add
+`fix(ddns): reject ambiguous record sets`. Run `deno task commits:check`
+locally. Maintainers prepare all manifest versions and validation together with
+`deno task release:prepare <version>` in a dedicated release commit. Do not add
 a committed `CHANGELOG.md`; the tag workflow generates release notes and
 attaches the complete changelog to the GitHub release.
 

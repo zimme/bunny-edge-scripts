@@ -4,7 +4,7 @@ Describe the behavior change and why it is needed.
 
 ## Verification
 
-- [ ] `npm run validate` passes in the Dev Container
+- [ ] `deno task validate` passes in the Dev Container
 - [ ] Tests cover behavior changes
 - [ ] Documentation covers user-facing changes
 

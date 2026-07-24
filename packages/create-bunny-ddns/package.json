@@ -43,10 +43,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "deno task build",
-    "prepack": "deno run --allow-read --allow-write --allow-env --allow-run=deno ../../scripts/build_npm_package.ts .",
-    "test": "deno task test",
-    "typecheck": "deno task check"
+    "prepack": "deno task build"
   },
   "publishConfig": {
     "access": "public"

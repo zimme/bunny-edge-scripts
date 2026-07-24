@@ -9,4 +9,19 @@ ENV DENO_DIR=/deno-dir \
     DENO_NO_PROMPT=1 \
     DENO_NO_UPDATE_CHECK=1
 
-RUN mkdir -p /deno-dir && chown vscode:vscode /deno-dir
+WORKDIR /tmp/bunny-edge-scripts
+
+COPY deno.json deno.lock ./
+COPY packages/bunny-ddns-edge-script/deno.json \
+    packages/bunny-ddns-edge-script/
+COPY packages/bunny-tunnel-edge-script/deno.json \
+    packages/bunny-tunnel-edge-script/
+COPY packages/create-bunny-ddns/deno.json packages/create-bunny-ddns/
+
+RUN deno ci \
+    && printf 'export {};\n' > cache-probe.ts \
+    && deno bundle cache-probe.ts -o cache-probe.js \
+    && chown -R vscode:vscode /deno-dir \
+    && rm -rf /tmp/bunny-edge-scripts
+
+WORKDIR /workspaces/bunny-edge-scripts

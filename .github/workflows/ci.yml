@@ -31,7 +31,6 @@ jobs:
       - name: Validate in development container
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
         with:
-          cacheFrom: ghcr.io/zimme/bunny-edge-scripts-devcontainer
           env: CI=true
           push: never
-          runCmd: npm run validate
+          runCmd: deno task validate

@@ -56,10 +56,11 @@ With npm's initializer shorthand, the generator is also available as:
 npm init @zimme/bunny-ddns
 ```
 
-The generator asks for non-secret setup choices, resolves dependencies, creates
-a `deno.lock`, and writes instructions for adding runtime secrets in Bunny Edge
-Scripting. It does not write your Bunny API key, DDNS shared secret, deploy key,
-or other credentials into generated files.
+The generator asks for setup choices, resolves dependencies, and creates a
+`deno.lock`. It can optionally use a Bunny API key from a masked prompt to
+create and configure the Edge Script. The key is held only in memory and is
+never written to generated files. When the key is skipped, the generator prints
+the complete manual Bunny and Git integration setup.
 
 ## Manual Install
 
@@ -140,17 +141,9 @@ If you prefer manual editor deployment, build the same file and paste
 `generated/script.ts` into Bunny's script editor. The generated file is a deploy
 artifact, not the place to maintain your source.
 
-The official bunny.net CLI can also link a local deployment repo, deploy the
-built bundle, and manage variables and secrets directly in Bunny:
-
-```sh
-bunny login
-bunny scripts link
-deno task build
-bunny scripts deploy generated/script.ts
-```
-
-Keep the CLI's local `.bunny/` directory out of source control.
+The scaffold generator can create and configure the Bunny Edge Script through
+the official Scripting API. Connecting the repository still uses Bunny's
+dashboard GitHub authorization flow.
 
 ## What It Provides
 
@@ -383,25 +376,29 @@ release checklist.
 
 The supported development environment is the Docker Compose-backed Dev Container
 in `.devcontainer/`. Open the repository in VS Code Dev Containers, GitHub
-Codespaces, or start it from a host with Docker, Node, and npm. The bootstrap
-command downloads the exact Dev Container CLI version when it is not already
-installed in the repository:
+Codespaces, or start it from a host with Docker and Deno. The bootstrap command
+downloads the exact Dev Container CLI version when it is not already installed
+in the repository:
 
 ```sh
-npm run devcontainer:up
-npm run devcontainer:exec -- npm run validate
-npm run devcontainer:down
+deno task devcontainer:up
+deno task devcontainer:exec deno task validate
+deno task devcontainer:down
 ```
 
 The container pins Deno, Node, npm, GitHub CLI, and GitHub Copilot CLI versions.
-Its Dev Container Features are also pinned by
-`.devcontainer/devcontainer-lock.json`. The `Dev Container` workflow publishes
-the resulting image to GHCR as `latest` and with an immutable commit tag
-whenever its definition or pinned tools change on `main`. Local development, CI,
-release jobs, and coding agents use that image as a build cache while still
-building from the checked-in Compose and Dev Container definitions. A missing
-cache therefore falls back to the same reproducible build instead of changing
-behavior.
+Node and npm exist only to exercise and publish npm artifacts; repository tasks
+and dependency management remain Deno-native. Its Dev Container Features are
+also pinned by `.devcontainer/devcontainer-lock.json`. The `Dev Container`
+workflow publishes the resulting image to GHCR as `latest` and with an immutable
+commit tag whenever its definition or pinned tools change on `main`. Local
+development, CI, release jobs, and coding agents use that image as a build cache
+while still building from the checked-in Compose and Dev Container definitions.
+A missing cache therefore falls back to the same reproducible build instead of
+changing behavior. The Dockerfile copies dependency manifests before running
+`deno ci`, so the prebuild carries the locked `DENO_DIR` and platform bundler
+while source-only changes reuse that layer. Compose is the sole GHCR cache
+source; workflows do not maintain separate dependency caches.
 
 GitHub creates the container package as private on its first publication. The
 repository workflows authenticate with their scoped `GITHUB_TOKEN`, so they can
@@ -416,14 +413,14 @@ Compose services so local development and CI continue to use the same topology.
 Inside the container, the normal commands are:
 
 ```sh
-npm run setup
-npm run doctor
-npm run fmt
-npm run test
-npm run validate
+deno task setup
+deno task doctor
+deno task fmt
+deno task test
+deno task validate
 ```
 
-`npm run validate` is the complete check used by CI. It verifies the pinned
+`deno task validate` is the complete check used by CI. It verifies the pinned
 toolchain, performs a frozen dependency install, checks Conventional Commits,
 and runs formatting, spelling, agent configuration, linting, typechecking,
 tests, builds, smoke checks, dependency audit, and JSR/npm publication dry-runs.
@@ -431,7 +428,7 @@ GitHub Actions sets `CI=true`; no separate CI-only script is maintained.
 
 Agent-wide project guidance lives in `AGENTS.md`. Focused workflows use the open
 Agent Skills format under `.agents/skills/`, with compatibility shims for GitHub
-Copilot, Claude Code, and Gemini CLI. Run `npm run agents:check` to validate
+Copilot, Claude Code, and Gemini CLI. Run `deno task agents:check` to validate
 instruction imports, skill metadata, UI metadata, and skill-directory symlinks.
 GitHub's special `copilot-setup-steps.yml` workflow runs for coding-agent tasks;
 its normal push and pull-request triggers are intentionally limited to changes
@@ -480,7 +477,7 @@ with different secrets.
 - [bunny.net GitHub integration](https://docs.bunny.net/scripting/github-integration)
 - [bunny.net Edge Script secrets](https://docs.bunny.net/scripting/secrets)
 - [bunny.net Edge Script limits](https://docs.bunny.net/scripting/limits)
-- [bunny.net CLI for Edge Scripts](https://bunny.net/blog/build-and-deploy-scripts-at-the-edge-with-the-bunny-net-cli/)
+- [bunny.net Scripting API](https://docs.bunny.net/api-reference/scripting)
 - [Deno create templates](https://docs.deno.com/runtime/reference/cli/create/)
 - [Development Containers](https://containers.dev/)
 - [Dev Containers in CI](https://github.com/devcontainers/ci)

@@ -1,44 +1,5 @@
 {
   "name": "bunny-edge-scripts-monorepo",
   "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "packageManager": "npm@11.8.0",
-  "workspaces": [
-    "packages/bunny-ddns-edge-script",
-    "packages/bunny-tunnel-edge-script",
-    "packages/create-bunny-ddns"
-  ],
-  "devDependencies": {
-    "@commitlint/cli": "21.2.1",
-    "@commitlint/config-conventional": "21.2.0",
-    "@devcontainers/cli": "0.87.0",
-    "cspell": "8.19.4",
-    "conventional-changelog": "8.1.0",
-    "conventional-changelog-conventionalcommits": "10.2.1",
-    "typescript": "6.0.3"
-  },
-  "scripts": {
-    "agents:check": "deno task agents:check",
-    "build": "deno task build",
-    "ci": "deno ci && npm run commits:check && deno task ci",
-    "commits:check": "commitlint --from \"$(git rev-list --max-parents=0 HEAD)\" --to HEAD --verbose",
-    "devcontainer:down": "docker compose -f .devcontainer/compose.yaml down",
-    "devcontainer:exec": "npm exec --yes --package=@devcontainers/cli@0.87.0 -- devcontainer exec --workspace-folder .",
-    "devcontainer:up": "npm exec --yes --package=@devcontainers/cli@0.87.0 -- devcontainer up --workspace-folder . --frozen-lockfile",
-    "doctor": "deno task doctor",
-    "fmt": "deno task fmt",
-    "lint": "deno task lint",
-    "hooks:install": "deno task hooks:install",
-    "release:create": "deno task release:create",
-    "release:prepare": "deno task release:prepare",
-    "release:publish": "deno task release:check && npm run ci && deno task publish",
-    "release:tag": "deno task release:tag",
-    "setup": "deno install --frozen && npm run hooks:install",
-    "spellcheck": "deno task spellcheck",
-    "test": "deno task test",
-    "typecheck": "deno task check",
-    "validate": "npm run doctor && npm run ci",
-    "version:set": "deno task version:set"
-  }
+  "private": true
 }

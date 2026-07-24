@@ -5,7 +5,7 @@ import {
 
 const version = Deno.args[0]?.trim();
 if (!version || Deno.args.length !== 1) {
-  throw new Error("Usage: npm run version:set -- <version>");
+  throw new Error("Usage: deno task version:set <version>");
 }
 assertReleaseVersion(version);
 

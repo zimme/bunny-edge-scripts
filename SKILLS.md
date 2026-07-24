@@ -21,5 +21,5 @@ Load only the skill relevant to the current task. Validate the catalog and its
 Claude, Gemini, and Copilot compatibility shims with:
 
 ```sh
-npm run agents:check
+deno task agents:check
 ```

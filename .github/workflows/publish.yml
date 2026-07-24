@@ -37,7 +37,6 @@ jobs:
       - name: Validate and publish in development container
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
         with:
-          cacheFrom: ghcr.io/zimme/bunny-edge-scripts-devcontainer
           env: |
             CI=true
             GH_TOKEN=${{ github.token }}
@@ -45,7 +44,7 @@ jobs:
             RELEASE_TAG=${{ github.ref_name }}
           inheritEnv: true
           push: never
-          runCmd: npm run release:publish
+          runCmd: deno task release:publish
 
   github-release:
     name: Create GitHub release
@@ -71,11 +70,10 @@ jobs:
       - name: Create release in development container
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
         with:
-          cacheFrom: ghcr.io/zimme/bunny-edge-scripts-devcontainer
           env: |
             CI=true
             GH_TOKEN=${{ github.token }}
             RELEASE_TAG=${{ github.ref_name }}
           inheritEnv: true
           push: never
-          runCmd: npm run release:create
+          runCmd: deno task release:create

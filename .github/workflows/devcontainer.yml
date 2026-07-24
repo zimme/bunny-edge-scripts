@@ -6,11 +6,13 @@ on:
     branches:
       - main
     paths:
+      - .dockerignore
       - .devcontainer/**
       - .github/workflows/devcontainer.yml
-      - .node-version
       - .tool-versions
-      - package.json
+      - deno.json
+      - deno.lock
+      - packages/*/deno.json
 
 permissions:
   contents: read
@@ -42,5 +44,4 @@ jobs:
         with:
           imageName: ghcr.io/zimme/bunny-edge-scripts-devcontainer
           imageTag: latest,${{ github.sha }}
-          cacheFrom: ghcr.io/zimme/bunny-edge-scripts-devcontainer
           push: always

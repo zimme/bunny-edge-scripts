@@ -17,7 +17,3 @@ services:
     init: true
     volumes:
       - ..:/workspaces/bunny-edge-scripts:cached
-      - deno-cache:/deno-dir
-
-volumes:
-  deno-cache:

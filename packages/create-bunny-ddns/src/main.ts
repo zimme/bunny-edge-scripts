@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-run=deno
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net=api.bunny.net --allow-run=deno
 
 import {
   defaultOptions,
@@ -7,6 +7,7 @@ import {
   type ScaffoldOptions,
   scaffoldProject,
 } from "./mod.ts";
+import { generateDdnsSharedSecret, provisionBunnyEdgeScript } from "./bunny.ts";
 
 if (import.meta.main) {
   await main(Deno.args);
@@ -44,11 +45,92 @@ export async function main(args: string[]): Promise<void> {
     }
   }
 
-  console.log(`\nNext steps:
-  cd ${result.directory}
+  const interactive = !args.includes("--yes") && !args.includes("-y") &&
+    Deno.stdin.isTerminal();
+  if (interactive) {
+    console.log(
+      "\nOptional automatic Bunny setup creates a Standalone Edge Script and " +
+        "configures its runtime secrets and variables. Bunny account API keys " +
+        "have full account access; this key is used only in memory and is not " +
+        "saved locally.",
+    );
+    const apiKey = await promptSecret(
+      "Bunny API key (leave blank for manual instructions): ",
+    );
+    if (apiKey) {
+      const ddnsSharedSecret = generateDdnsSharedSecret();
+      console.log("\nCreating and configuring the Bunny Edge Script...");
+      const provisioned = await provisionBunnyEdgeScript({
+        apiKey,
+        scriptName: options.projectName,
+        ddnsSharedSecret,
+        ddnsUsername: options.ddnsUsername,
+        allowedHosts: options.allowedHosts,
+        allowedZones: options.allowedZones,
+      });
+      console.log(`\nCreated Bunny Edge Script ${provisioned.scriptId}.`);
+      if (provisioned.hostname) {
+        console.log(`Bunny hostname: ${provisioned.hostname}`);
+      }
+      console.log(
+        `DDNS shared secret (shown once; configure this in inadyn):\n${ddnsSharedSecret}`,
+      );
+      console.log(gitIntegrationInstructions(result.directory));
+      return;
+    }
+  }
+
+  console.log(manualBunnySetupInstructions(options, result.directory));
+}
+
+function manualBunnySetupInstructions(
+  options: ScaffoldOptions,
+  directory: string,
+): string {
+  const scopeVariables = options.allowedHosts || options.allowedZones
+    ? `${
+      options.allowedHosts
+        ? `\n     DDNS_ALLOWED_HOSTS=${options.allowedHosts}`
+        : ""
+    }${
+      options.allowedZones
+        ? `\n     DDNS_ALLOWED_ZONES=${options.allowedZones}`
+        : ""
+    }\n     DDNS_ALLOW_ALL_HOSTS=false`
+    : "\n     DDNS_ALLOW_ALL_HOSTS=true";
+
+  return `\nAutomatic Bunny setup was skipped.
+
+Manual Bunny setup:
+  1. Push ${directory} to GitHub.
+  2. In Bunny, open Edge Platform > Scripting and add a Standalone script.
+  3. Choose "Deploy and edit with GitHub" and connect this repository.
+  4. Use install command: deno install --frozen
+  5. Use build command: deno task build
+  6. Use entry file: generated/script.ts
+  7. Under Env Configuration, add these Environment Secrets:
+     BUNNY_API_KEY=<your Bunny account API key>
+     DDNS_SHARED_SECRET=<a strong, unique secret for inadyn>
+  8. Add these Environment Variables:
+     DDNS_USERNAME=${options.ddnsUsername}${scopeVariables}
+
+Local checks:
+  cd ${directory}
   ${options.installDependencies ? "" : "deno install\n  "}deno task ci
 
-Then follow README.md to connect the repo to Bunny Edge Scripting.`);
+The generated README.md contains the complete deployment and inadyn setup.`;
+}
+
+function gitIntegrationInstructions(directory: string): string {
+  return `\nFinish the Git integration in Bunny:
+  1. Push ${directory} to GitHub.
+  2. Open the new script in Bunny and connect this repository.
+  3. Set install command to: deno install --frozen
+  4. Set build command to: deno task build
+  5. Set entry file to: generated/script.ts
+  6. Deploy, then use the script hostname in inadyn.
+
+The Bunny API key was not written to disk.`;
 }
 
 function optionsFromArgs(args: string[]): ScaffoldOptions {
@@ -221,6 +303,40 @@ function promptChoice<T extends string>(
   }
 
   return answer as T;
+}
+
+async function promptSecret(label: string): Promise<string> {
+  await Deno.stdout.write(new TextEncoder().encode(label));
+  Deno.stdin.setRaw(true);
+  const bytes: number[] = [];
+  const buffer = new Uint8Array(64);
+  try {
+    while (true) {
+      const count = await Deno.stdin.read(buffer);
+      if (count === null) {
+        break;
+      }
+      for (const byte of buffer.subarray(0, count)) {
+        if (byte === 3) {
+          throw new Error("Setup cancelled.");
+        }
+        if (byte === 4 || byte === 10 || byte === 13) {
+          return new TextDecoder().decode(new Uint8Array(bytes)).trim();
+        }
+        if (byte === 8 || byte === 127) {
+          bytes.pop();
+          continue;
+        }
+        if (byte >= 32) {
+          bytes.push(byte);
+        }
+      }
+    }
+    return new TextDecoder().decode(new Uint8Array(bytes)).trim();
+  } finally {
+    Deno.stdin.setRaw(false);
+    await Deno.stdout.write(new Uint8Array([10]));
+  }
 }
 
 function parseDeployMode(value: string): DeployMode {
