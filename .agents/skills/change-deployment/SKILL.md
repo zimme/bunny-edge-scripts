@@ -24,7 +24,7 @@ description: Modify or review Dev Container, Docker Compose, GitHub Actions, Bun
 7. Keep build and dependency caching in the Dockerfile and Compose definition,
    not duplicated in workflows. Verify cold and warm image builds and that a
    fresh container can install and bundle without dependency downloads.
-8. Run `deno task validate` inside the Dev Container and inspect all JSR and npm
-   dry-run contents.
+8. Run `deno task validate` inside the Dev Container and inspect all JSR dry-run
+   contents and allowlisted npm artifacts.
 9. Update `README.md`, `CONTRIBUTING.md`, `RELEASING.md`, `AGENTS.md`, and
    examples when their workflows change.

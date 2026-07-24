@@ -1,10 +1,8 @@
 #!/usr/bin/env -S deno run --allow-net=api.bunny.net
 
-import { provisionBunnyEdgeScript } from "./bunny.ts";
+import { provisionBunnyEdgeScript, validateDdnsSharedSecret } from "./bunny.ts";
 
 const PRIVATE_TERMINAL_ACKNOWLEDGEMENT = "I AM IN A PRIVATE TERMINAL";
-const MIN_DDNS_SECRET_LENGTH = 32;
-const MAX_DDNS_SECRET_LENGTH = 256;
 const MAX_INPUT_BYTES = 4096;
 
 /** Non-secret configuration embedded in a generated deployment repository. */
@@ -17,6 +15,8 @@ export interface PrivateTerminalProvisionOptions {
   allowedHosts: string;
   /** Comma-separated DNS zones the DDNS client may update. */
   allowedZones: string;
+  /** Explicitly grants account-wide DDNS authority when no allow-list is set. */
+  allowAllHosts?: boolean;
 }
 
 /** Non-secret details returned after successful provisioning. */
@@ -103,19 +103,6 @@ export async function provisionFromPrivateTerminal(
       "DDNS secret from your password manager.\n",
   );
   return result;
-}
-
-function validateDdnsSharedSecret(secret: string): void {
-  if (
-    secret.length < MIN_DDNS_SECRET_LENGTH ||
-    secret.length > MAX_DDNS_SECRET_LENGTH ||
-    !/^[\x21-\x7E]+$/.test(secret) ||
-    secret.includes(",")
-  ) {
-    throw new Error(
-      "DDNS shared secret must be 32 to 256 printable ASCII characters without commas.",
-    );
-  }
 }
 
 function timingSafeEqual(left: string, right: string): boolean {

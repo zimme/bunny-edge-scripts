@@ -11,6 +11,9 @@ export const versionManifestPaths = [
   ]),
 ] as const;
 
+export const generatorVersionSource = "packages/create-bunny-ddns/src/mod.ts";
+export const exampleImportMapPath = "examples/ddns-edge-script-repo/deno.json";
+
 const SEMVER_PATTERN =
   /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:(?:0|[1-9]\d*)|(?:\d*[a-z-][0-9a-z-]*))(?:\.(?:(?:0|[1-9]\d*)|(?:\d*[a-z-][0-9a-z-]*)))*)?$/i;
 
@@ -74,6 +77,30 @@ export async function assertManifestVersions(
       throw new Error(`${manifest} version must equal release tag ${version}.`);
     }
   }
+
+  const generatorSource = await readTextFile(generatorVersionSource);
+  if (
+    !generatorSource.includes(
+      `const DEFAULT_PACKAGE_VERSION = "^${version}";`,
+    )
+  ) {
+    throw new Error(
+      `${generatorVersionSource} default package version must equal ^${version}.`,
+    );
+  }
+
+  const example = JSON.parse(await readTextFile(exampleImportMapPath)) as {
+    imports?: Record<string, string>;
+  };
+  const expectedRuntimeImport = `jsr:@zimme/bunny-ddns-edge-script@^${version}`;
+  if (
+    example.imports?.["@zimme/bunny-ddns-edge-script"] !==
+      expectedRuntimeImport
+  ) {
+    throw new Error(
+      `${exampleImportMapPath} runtime import must equal ${expectedRuntimeImport}.`,
+    );
+  }
 }
 
 export async function setManifestVersions(version: string): Promise<void> {
@@ -85,4 +112,28 @@ export async function setManifestVersions(version: string): Promise<void> {
     value.version = version;
     await Deno.writeTextFile(manifest, `${JSON.stringify(value, null, 2)}\n`);
   }
+
+  const source = await Deno.readTextFile(generatorVersionSource);
+  const nextSource = source.replace(
+    /const DEFAULT_PACKAGE_VERSION = "\^[^"]+";/,
+    `const DEFAULT_PACKAGE_VERSION = "^${version}";`,
+  );
+  if (nextSource === source) {
+    throw new Error(
+      `${generatorVersionSource} does not contain DEFAULT_PACKAGE_VERSION.`,
+    );
+  }
+  await Deno.writeTextFile(generatorVersionSource, nextSource);
+
+  const example = JSON.parse(
+    await Deno.readTextFile(exampleImportMapPath),
+  ) as {
+    imports: Record<string, string>;
+  };
+  example.imports["@zimme/bunny-ddns-edge-script"] =
+    `jsr:@zimme/bunny-ddns-edge-script@^${version}`;
+  await Deno.writeTextFile(
+    exampleImportMapPath,
+    `${JSON.stringify(example, null, 2)}\n`,
+  );
 }

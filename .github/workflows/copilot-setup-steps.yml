@@ -25,18 +25,7 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
-          cache: true
           deno-version-file: .tool-versions
-
-      - name: Install locked dependencies
-        run: deno ci
-        env:
-          CI: "true"
-
-      - name: Validate agent configuration
-        run: deno task agents:check
-        env:
-          CI: "true"
 
       - name: Authenticate to GitHub Container Registry
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
@@ -47,5 +36,10 @@ jobs:
 
       - name: Prepare development container
         run: deno task devcontainer:up
+        env:
+          CI: "true"
+
+      - name: Validate agent configuration
+        run: deno task devcontainer:exec deno task agents:check
         env:
           CI: "true"

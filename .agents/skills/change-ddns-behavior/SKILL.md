@@ -14,7 +14,7 @@ description: Modify or review DDNS endpoint parsing, authentication, response co
    multi-record behavior unless the task explicitly changes the contract.
 4. Add focused cases to `packages/bunny-ddns-edge-script/tests/app.test.ts`,
    including rejection and Bunny API failure paths.
-5. Run `npm run test` and `npm run build` while iterating.
+5. Run `deno task test` and `deno task build` while iterating.
 6. Update public API, configuration, response-code, and security documentation.
-7. Run `npm run validate` inside the Dev Container and review generated package
-   contents before handoff.
+7. Run `deno task validate` inside the Dev Container and review generated
+   package contents before handoff.

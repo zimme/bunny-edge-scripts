@@ -1,4 +1,5 @@
 import { assertReleaseVersion } from "./release_version.ts";
+import { withVerifiedNpmPackages } from "./verify_npm_packages.ts";
 
 const version = Deno.env.get("RELEASE_TAG")?.trim();
 if (!version) {
@@ -16,6 +17,8 @@ const packages = [
     name: "@zimme/create-bunny-ddns",
   },
 ];
+
+const npmPackagesToPublish = new Set<string>();
 
 for (const packageInfo of packages) {
   const jsrVersionUrl =
@@ -36,8 +39,24 @@ for (const packageInfo of packages) {
   if (await versionExists(npmVersionUrl)) {
     console.log(`npm ${packageInfo.name}@${version} already exists; skipping.`);
   } else {
-    await run("npm", ["publish"], packageInfo.directory);
+    npmPackagesToPublish.add(packageInfo.name);
   }
+}
+
+if (npmPackagesToPublish.size > 0) {
+  await withVerifiedNpmPackages(async (artifacts) => {
+    for (const artifact of artifacts) {
+      if (!npmPackagesToPublish.has(artifact.name)) {
+        continue;
+      }
+      if (artifact.version !== version) {
+        throw new Error(
+          `${artifact.name} artifact version ${artifact.version} does not match release ${version}.`,
+        );
+      }
+      await run("npm", ["publish", artifact.path]);
+    }
+  });
 }
 
 async function versionExists(url: string): Promise<boolean> {

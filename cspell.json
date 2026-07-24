@@ -7,7 +7,7 @@
     ".cspellcache",
     ".npm-cache",
     "dist",
-    "examples/edge-script-repo/generated",
+    "examples/ddns-edge-script-repo/generated",
     "node_modules",
     "package-lock.json"
   ],

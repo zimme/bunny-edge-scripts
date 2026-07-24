@@ -6,7 +6,7 @@ workflows live in `.agents/skills/` and should be loaded only when relevant.
 
 ## Project intent
 
-This Deno-first monorepo publishes two packages to JSR and npm:
+This Deno-first monorepo is designed to publish two packages to JSR and npm:
 
 - `@zimme/bunny-ddns-edge-script`: secure DynDNS-compatible Bunny DNS updates.
 - `@zimme/create-bunny-ddns`: a generator for personal DDNS deployment repos.
@@ -33,7 +33,7 @@ source is mounted. Compose owns the GHCR `cache_from` setting; do not duplicate
 container or dependency caching in workflows.
 
 Use root Deno tasks as the stable command interface. npm exists only for npm
-package validation and publication:
+artifact validation and publication:
 
 ```sh
 deno task setup
@@ -71,8 +71,8 @@ commands; use `CI=true` when behavior genuinely needs to differ in CI.
 - Do not create or edit `CHANGELOG.md` by hand. The tag-only release workflow
   generates it from Conventional Commits as a GitHub release artifact.
 - Keep release tags increasing SemVer, annotated, signed, and GitHub-verified.
-- Never commit, print, or place Bunny API keys, DDNS secrets, publish tokens, or
-  origin secrets in examples, fixtures, logs, or generated files.
+- Never commit, print, or place Bunny API keys, DDNS secrets, or publish tokens
+  in examples, fixtures, logs, or generated files.
 - Never run a consumer repository's `deno task provision` or ask a user to enter
   credentials into an agent-controlled terminal. Provisioning is a user-owned
   dashboard or private-terminal action.
@@ -98,9 +98,9 @@ Before handing off a code or configuration change:
 
 When asked to review, lead with actionable findings ordered by severity. Focus
 on authentication and authorization boundaries, secret handling, hostname and
-zone scope, DNS mutation safety, proxy header handling, Bunny Edge Scripting
-limits, package compatibility, and missing tests. Include file and line
-references. Say explicitly when no findings remain and name residual test gaps.
+zone scope, DNS mutation safety, Bunny Edge Scripting limits, package
+compatibility, and missing tests. Include file and line references. Say
+explicitly when no findings remain and name residual test gaps.
 
 ## Repository map
 
@@ -108,13 +108,14 @@ references. Say explicitly when no findings remain and name residual test gaps.
 - `packages/create-bunny-ddns/src/`: scaffold generator implementation.
 - `AI_SETUP.md`: consumer-facing AI agent runbook for end-to-end DDNS setup.
 - `packages/*/tests/`: package-focused tests.
-- `examples/*-edge-script-repo/`: minimal consumer deployment repos.
+- `examples/ddns-edge-script-repo/`: minimal DDNS consumer deployment
+  repository.
 - `scripts/build_npm_package.ts`: generated npm package artifacts.
 - `scripts/verify_release_version.ts`: release/package version guard.
 - `scripts/set_version.ts`: lockstep release-version updater.
 - `scripts/prepare_release.ts`: guarded version preparation and validation.
 - `scripts/create_release_tag.ts`: post-merge signed-tag creator.
-- `scripts/pre_push.ts`: local release-tag push guard.
+- `scripts/pre_push.ts`: outgoing commit-message and release-tag push guard.
 - `scripts/create_github_release.ts`: Conventional Changelog release builder.
 - `scripts/publish_packages.ts`: retry-safe JSR and npm package publication.
 - `scripts/verify_agent_config.ts`: instruction, skill, metadata, and shim

@@ -10,6 +10,7 @@ export interface ScaffoldOptions {
   ddnsUsername: string;
   allowedHosts: string;
   allowedZones: string;
+  allowAllHosts: boolean;
   force: boolean;
   dryRun: boolean;
   installDependencies: boolean;

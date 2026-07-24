@@ -18,7 +18,8 @@ focused workflow and OpenAI interface metadata used by compatible coding agents.
   DDNS deployment repository.
 
 Load only the skill relevant to the current task. Validate the catalog and its
-Claude, Gemini, and Copilot compatibility shims with:
+Claude, Gemini, and Copilot compatibility shims with the repository's Deno
+command:
 
 ```sh
 deno task agents:check

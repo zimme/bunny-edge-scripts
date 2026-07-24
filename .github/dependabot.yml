@@ -29,7 +29,7 @@ updates:
     schedule:
       interval: "weekly"
   - package-ecosystem: "github-actions"
-    directory: "/examples/edge-script-repo/.github/workflows"
+    directory: "/examples/ddns-edge-script-repo/.github/workflows"
     commit-message:
       prefix: "ci(deps)"
     schedule:

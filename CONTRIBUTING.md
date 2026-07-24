@@ -34,8 +34,8 @@ workflow-only caches.
 
 Package `dist/` directories are generated from package `src/` directories and
 are gitignored. Do not edit them by hand. Change source files, run
-`deno task build` for a local package build, and rely on `prepack` scripts to
-refresh `dist/` during `npm pack` and `npm publish`.
+`deno task build` for a local package build, and rely on the package `prepack`
+scripts to refresh `dist/` while the verified npm release tarballs are built.
 
 Deno tasks are the stable command interface for developers and automation. npm
 is retained only for npm tarball validation and publication.
@@ -45,7 +45,8 @@ is retained only for npm tarball validation and publication.
 For release and compatibility purposes, the public API is:
 
 - The package-root exports declared in each package's `src/mod.*`
-- The documented environment variables in `README.md`
+- The environment variables documented in
+  `packages/bunny-ddns-edge-script/README.md`
 - The documented HTTP endpoints, parameters, and DDNS response codes
 
 Internal helpers in package implementation files are not part of the stable
@@ -54,8 +55,10 @@ package contract unless they are re-exported from that package's root module.
 ## Versioning
 
 This project uses Semantic Versioning with both packages released at one
-lockstep version. Conventional Commits determine the changelog sections and
-communicate impact:
+lockstep version. A manifest version of `0.0.0` denotes unreleased source;
+source-checkout workflows must verify that a matching registry release exists
+before suggesting registry installation. Conventional Commits determine the
+changelog sections and communicate impact:
 
 - `fix:` produces a patch release.
 - `feat:` produces a minor release.
@@ -79,8 +82,9 @@ attaches the complete changelog to the GitHub release.
 - Keep the package easy to consume from a tiny Bunny Edge Script repo.
 - Preserve secure defaults.
 - Add or update tests for behavior changes.
-- Update `README.md` when configuration, endpoints, response codes, or deploy
-  behavior changes.
+- Update the applicable root, package, example, security, or setup documentation
+  when configuration, endpoints, response codes, packaging, or deploy behavior
+  changes.
 - Avoid runtime dependencies unless they are clearly worth the operational cost.
 - Use a Conventional Commit title for each pull request and squash-merge it so
   the title becomes the single commit on `main`.

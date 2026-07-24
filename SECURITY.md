@@ -2,9 +2,9 @@
 
 ## Supported Versions
 
-Security fixes target the latest published Semantic Version. There is no
-supported release until the first GitHub release and matching registry packages
-have been published.
+Security fixes target the latest Semantic Version that exists as a matching
+GitHub, JSR, and npm release. Source checkouts still at `0.0.0` are unreleased
+and unsupported.
 
 ## Reporting A Vulnerability
 
@@ -40,8 +40,10 @@ Update requests must provide explicit IP query parameters. The package does not
 trust forwarding headers to decide which address should be written into DNS.
 
 Use `DDNS_ALLOWED_HOSTS`, `DDNS_ALLOWED_ZONES`, `DDNS_DENIED_HOSTS`, and
-`DDNS_DENIED_ZONES` to scope DDNS authority. Account-wide access requires the
-explicit `DDNS_ALLOW_ALL_HOSTS=true` acknowledgement.
+`DDNS_DENIED_ZONES` to scope DDNS authority. If both allow lists are present,
+the requested hostname and its selected Bunny zone must both match; the lists
+form an intersection. Deny rules always win. With no allow list, account-wide
+access requires the explicit `DDNS_ALLOW_ALL_HOSTS=true` acknowledgement.
 
 ## Operational Guidance
 
@@ -51,7 +53,9 @@ explicit `DDNS_ALLOW_ALL_HOSTS=true` acknowledgement.
 - Keep `DDNS_ALLOW_INSECURE_HTTP=false` in Bunny.
 - Rotate secrets with `DDNS_SHARED_SECRETS=old,new`, update clients, then remove
   the old secret.
-- Require clients to send `myip`, `ip`, or `myip6`; use `/checkip` only for
-  discovery.
+- Require clients to send `myip`, `ip`, or `myip6`. Treat `/checkip` as an
+  optional diagnostic and configure a client to use it only after verifying the
+  returned address on the deployed script; Bunny does not document a guaranteed
+  sanitized client-address header for this purpose.
 - Leave `DDNS_MULTI_RECORD_MODE=reject` unless the hostname is intentionally a
   DDNS-managed record set.

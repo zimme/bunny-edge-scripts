@@ -9,6 +9,9 @@ const DEFAULT_TTL_SECONDS = 900;
 const DEFAULT_MAX_HOSTNAMES = 25;
 const DEFAULT_MAX_MUTATIONS = 40;
 const MAX_ZONE_PAGES = 10;
+const BUNNY_SUBREQUEST_LIMIT = 50;
+const MIN_SHARED_SECRET_LENGTH = 32;
+const MAX_SHARED_SECRET_LENGTH = 256;
 const DEFAULT_MANAGED_COMMENT = "Managed by bunny-ddns-edge-script";
 
 /**
@@ -148,13 +151,13 @@ const DEFAULT_MANAGED_COMMENT = "Managed by bunny-ddns-edge-script";
  * @returns {(request: Request) => Promise<Response>}
  */
 export function createHandler(options) {
-  validateRuntimeConfig(options.config);
+  const config = normalizeRuntimeConfig(options.config);
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
-  const client = new BunnyDnsClient(options.config, fetcher);
+  const client = new BunnyDnsClient(config, fetcher);
 
   return async (request) => {
     try {
-      return await routeRequest(request, options.config, client);
+      return await routeRequest(request, config, client);
     } catch (error) {
       console.error(
         "[bunny-ddns-edge-script] unhandled request failure",
@@ -178,9 +181,11 @@ export function readConfigFromEnv(env) {
     throw new Error("Missing required BUNNY_API_KEY secret.");
   }
 
-  const sharedSecrets = parseList(
-    env.get("DDNS_SHARED_SECRETS") ?? env.get("DDNS_SHARED_SECRET"),
-  );
+  const pluralSecrets = env.get("DDNS_SHARED_SECRETS");
+  const singularSecret = env.get("DDNS_SHARED_SECRET");
+  const sharedSecrets = pluralSecrets === undefined
+    ? (singularSecret === undefined ? [] : [singularSecret])
+    : parseSharedSecretList(pluralSecrets);
   if (sharedSecrets.length === 0) {
     throw new Error("Missing required DDNS_SHARED_SECRET secret.");
   }
@@ -198,10 +203,10 @@ export function readConfigFromEnv(env) {
     bunnyApiKey,
     sharedSecrets,
     username: emptyToUndefined(env.get("DDNS_USERNAME")),
-    allowedHosts: normalizePatterns(parseList(env.get("DDNS_ALLOWED_HOSTS"))),
-    deniedHosts: normalizePatterns(parseList(env.get("DDNS_DENIED_HOSTS"))),
-    allowedZones: normalizePatterns(parseList(env.get("DDNS_ALLOWED_ZONES"))),
-    deniedZones: normalizePatterns(parseList(env.get("DDNS_DENIED_ZONES"))),
+    allowedHosts: parseList(env.get("DDNS_ALLOWED_HOSTS")),
+    deniedHosts: parseList(env.get("DDNS_DENIED_HOSTS")),
+    allowedZones: parseList(env.get("DDNS_ALLOWED_ZONES")),
+    deniedZones: parseList(env.get("DDNS_DENIED_ZONES")),
     allowAllHosts: parseBoolean(env.get("DDNS_ALLOW_ALL_HOSTS"), false),
     autoCreate: parseBoolean(env.get("DDNS_AUTO_CREATE"), true),
     defaultTtl: parseInteger(
@@ -226,12 +231,29 @@ export function readConfigFromEnv(env) {
     ),
     managedComment: env.get("DDNS_RECORD_COMMENT") ?? DEFAULT_MANAGED_COMMENT,
   };
-  validateRuntimeConfig(config);
-  return config;
+  return normalizeRuntimeConfig(config);
 }
 
 /** Secure, descriptive alias for {@link readConfigFromEnv}. */
 export const readBunnyDdnsConfigFromEnv = readConfigFromEnv;
+
+/**
+ * @param {RuntimeConfig} config
+ * @returns {RuntimeConfig}
+ */
+function normalizeRuntimeConfig(config) {
+  const normalized = {
+    ...config,
+    sharedSecrets: [...config.sharedSecrets],
+    allowedHosts: normalizePatterns(config.allowedHosts, "allowedHosts"),
+    deniedHosts: normalizePatterns(config.deniedHosts, "deniedHosts"),
+    allowedZones: normalizePatterns(config.allowedZones, "allowedZones"),
+    deniedZones: normalizePatterns(config.deniedZones, "deniedZones"),
+  };
+
+  validateRuntimeConfig(normalized);
+  return normalized;
+}
 
 /**
  * @param {RuntimeConfig} config
@@ -240,6 +262,9 @@ function validateRuntimeConfig(config) {
   parseApiBaseUrl(config.apiBaseUrl, config.allowInsecureHttp);
   if (!config.bunnyApiKey || config.sharedSecrets.length === 0) {
     throw new Error("Bunny API and DDNS shared secrets are required.");
+  }
+  for (const secret of config.sharedSecrets) {
+    validateSharedSecret(secret);
   }
   if (
     !config.allowAllHosts && config.allowedHosts.length === 0 &&
@@ -370,9 +395,10 @@ class BunnyDnsClient {
   }
 
   /**
+   * @param {SubrequestBudget} budget
    * @returns {Promise<BunnyDnsZone[]>}
    */
-  async listZones() {
+  async listZones(budget) {
     /** @type {BunnyDnsZone[]} */
     const zones = [];
     let page = 1;
@@ -381,7 +407,9 @@ class BunnyDnsClient {
       const url = new URL("/dnszone", this.#config.apiBaseUrl);
       url.searchParams.set("page", String(page));
       url.searchParams.set("perPage", "1000");
+      url.searchParams.set("view", "1");
 
+      budget.consume();
       const response = await this.#fetcher(url, {
         headers: this.#apiHeaders(),
       });
@@ -406,17 +434,62 @@ class BunnyDnsClient {
 
   /**
    * @param {BunnyDnsZone} zone
+   * @param {DdnsRecordType} type
+   * @param {SubrequestBudget} budget
+   * @returns {Promise<BunnyDnsRecord[]>}
+   */
+  async listRecords(zone, type, budget) {
+    /** @type {BunnyDnsRecord[]} */
+    const records = [];
+    let page = 1;
+
+    while (true) {
+      const url = new URL(
+        `/dnszone/${zone.Id}/records`,
+        this.#config.apiBaseUrl,
+      );
+      url.searchParams.set("page", String(page));
+      url.searchParams.set("perPage", "1000");
+      url.searchParams.set("type", String(type));
+
+      budget.consume();
+      const response = await this.#fetcher(url, {
+        headers: this.#apiHeaders(),
+      });
+      await assertBunnyResponse(
+        response,
+        `list DNS records for zone ${zone.Id}`,
+      );
+
+      const body = validateBunnyRecordListResponse(
+        await response.json(),
+        page,
+        type,
+      );
+      records.push(...body.Items);
+      if (!body.HasMoreItems) {
+        return records;
+      }
+
+      page += 1;
+    }
+  }
+
+  /**
+   * @param {BunnyDnsZone} zone
    * @param {BunnyDnsRecord} record
    * @param {RequestedAddress} address
+   * @param {SubrequestBudget} budget
    * @returns {Promise<void>}
    */
-  async updateRecord(zone, record, address) {
+  async updateRecord(zone, record, address, budget) {
     const url = new URL(
       `/dnszone/${zone.Id}/records/${record.Id}`,
       this.#config.apiBaseUrl,
     );
     const payload = recordToUpdatePayload(record, address);
 
+    budget.consume();
     const response = await this.#fetcher(url, {
       method: "POST",
       headers: this.#apiHeaders({ "Content-Type": "application/json" }),
@@ -429,9 +502,10 @@ class BunnyDnsClient {
    * @param {BunnyDnsZone} zone
    * @param {string} name
    * @param {RequestedAddress} address
+   * @param {SubrequestBudget} budget
    * @returns {Promise<void>}
    */
-  async createRecord(zone, name, address) {
+  async createRecord(zone, name, address, budget) {
     const url = new URL(`/dnszone/${zone.Id}/records`, this.#config.apiBaseUrl);
     const payload = {
       Type: address.type,
@@ -442,6 +516,7 @@ class BunnyDnsClient {
       Comment: this.#config.managedComment,
     };
 
+    budget.consume();
     const response = await this.#fetcher(url, {
       method: "PUT",
       headers: this.#apiHeaders({ "Content-Type": "application/json" }),
@@ -458,6 +533,23 @@ class BunnyDnsClient {
     const headers = new Headers(extra);
     headers.set("AccessKey", this.#config.bunnyApiKey);
     return headers;
+  }
+}
+
+class SubrequestBudget {
+  #used = 0;
+
+  /** @returns {number} */
+  get remaining() {
+    return BUNNY_SUBREQUEST_LIMIT - this.#used;
+  }
+
+  /** @returns {void} */
+  consume() {
+    if (this.remaining < 1) {
+      throw new Error("Bunny Edge Script subrequest budget exhausted.");
+    }
+    this.#used += 1;
   }
 }
 
@@ -500,22 +592,68 @@ function isBunnyDnsZone(value) {
   if (
     !Number.isSafeInteger(zone.Id) || typeof zone.Domain !== "string" ||
     !normalizeHostname(zone.Domain) ||
-    (zone.Records !== null && !Array.isArray(zone.Records))
+    (zone.Records !== undefined && zone.Records !== null &&
+      !Array.isArray(zone.Records))
   ) {
     return false;
   }
-  return (zone.Records ?? []).every((value) => {
+  return (zone.Records ?? []).every(isBunnyDnsRecord);
+}
+
+/** @param {unknown} value @returns {value is BunnyDnsRecord} */
+function isBunnyDnsRecord(value) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const record = /** @type {Record<string, unknown>} */ (value);
+  return Number.isSafeInteger(record.Id) &&
+    Number.isSafeInteger(record.Type) &&
+    (record.Name === null || record.Name === undefined ||
+      typeof record.Name === "string") &&
+    (record.Value === null || record.Value === undefined ||
+      typeof record.Value === "string") &&
+    (record.Disabled === null || record.Disabled === undefined ||
+      typeof record.Disabled === "boolean");
+}
+
+/**
+ * @param {unknown} value
+ * @param {number} expectedPage
+ * @param {DdnsRecordType} expectedType
+ * @returns {{ Items: BunnyDnsRecord[], HasMoreItems: boolean }}
+ */
+function validateBunnyRecordListResponse(value, expectedPage, expectedType) {
+  if (!value || typeof value !== "object") {
+    throw new Error("Bunny returned an invalid DNS record response.");
+  }
+  const body = /** @type {Record<string, unknown>} */ (value);
+  if (!Array.isArray(body.Items) || typeof body.HasMoreItems !== "boolean") {
+    throw new Error("Bunny returned an invalid DNS record page.");
+  }
+  if (
+    body.CurrentPage !== undefined &&
+    body.CurrentPage !== expectedPage
+  ) {
+    throw new Error("Bunny returned an unexpected DNS record page.");
+  }
+  const items = body.Items.map((value) => {
     if (!value || typeof value !== "object") {
-      return false;
+      throw new Error("Bunny returned an invalid DNS record.");
     }
-    const record = /** @type {Record<string, unknown>} */ (value);
-    return Number.isSafeInteger(record.Id) &&
-      Number.isSafeInteger(record.Type) &&
-      (record.Name === null || record.Name === undefined ||
-        typeof record.Name === "string") &&
-      (record.Value === null || record.Value === undefined ||
-        typeof record.Value === "string");
+    const source = /** @type {Record<string, unknown>} */ (value);
+    const record = {
+      ...source,
+      Type: source.Type ?? expectedType,
+    };
+    if (!isBunnyDnsRecord(record) || record.Type !== expectedType) {
+      throw new Error("Bunny returned an invalid DNS record.");
+    }
+    return record;
   });
+  return {
+    Items: /** @type {BunnyDnsRecord[]} */ (items),
+    HasMoreItems: body.HasMoreItems,
+  };
 }
 
 /**
@@ -580,8 +718,25 @@ async function routeRequest(request, config, client) {
     return ddnsResponse([{ code: addresses.code }]);
   }
 
-  const zones = await client.listZones();
+  const budget = new SubrequestBudget();
+  const zones = await client.listZones(budget);
   const zoneCandidates = prepareZoneCandidates(zones);
+  const selectedZones = new Map();
+  for (const hostname of hostnames.values) {
+    const zone = findBestZone(hostname, zoneCandidates);
+    if (zone && isHostnameAllowed(hostname, zone, config)) {
+      selectedZones.set(zone.Id, zone);
+    }
+  }
+
+  for (const zone of selectedZones.values()) {
+    const records = [];
+    for (const address of addresses.values) {
+      records.push(...await client.listRecords(zone, address.type, budget));
+    }
+    zone.Records = records;
+  }
+
   const plans = hostnames.values.map((hostname) =>
     planHostnameUpdate(hostname, addresses.values, zoneCandidates, config)
   );
@@ -590,7 +745,10 @@ async function routeRequest(request, config, client) {
       total + (plan.kind === "ok" ? countMutations(plan.value) : 0),
     0,
   );
-  if (mutationCount > config.maxMutations) {
+  if (
+    mutationCount > config.maxMutations ||
+    mutationCount > budget.remaining
+  ) {
     return ddnsResponse([{ code: "numhost" }]);
   }
 
@@ -604,7 +762,7 @@ async function routeRequest(request, config, client) {
     }
 
     try {
-      const changed = await executePlan(plan.value, client);
+      const changed = await executePlan(plan.value, client, budget);
       lines.push({
         code: changed ? "good" : "nochg",
         detail: addresses.values.map((address) => address.ip).join(","),
@@ -706,9 +864,10 @@ function planHostnameUpdate(hostname, addresses, zones, config) {
 /**
  * @param {HostPlan} plan
  * @param {BunnyDnsClient} client
+ * @param {SubrequestBudget} budget
  * @returns {Promise<boolean>}
  */
-async function executePlan(plan, client) {
+async function executePlan(plan, client, budget) {
   let changed = false;
 
   for (const action of plan.actions) {
@@ -719,12 +878,17 @@ async function executePlan(plan, client) {
     changed = true;
 
     if (action.kind === "create") {
-      await client.createRecord(plan.zone, action.name, action.address);
+      await client.createRecord(
+        plan.zone,
+        action.name,
+        action.address,
+        budget,
+      );
       continue;
     }
 
     for (const record of action.records) {
-      await client.updateRecord(plan.zone, record, action.address);
+      await client.updateRecord(plan.zone, record, action.address, budget);
     }
   }
 
@@ -828,7 +992,9 @@ function prepareZoneCandidates(zones) {
  */
 function getMatchingRecords(zone, hostname, type) {
   return (zone.Records ?? []).filter((record) =>
-    record.Type === type && recordHostname(record, zone.Domain) === hostname
+    record.Disabled !== true &&
+    record.Type === type &&
+    recordHostname(record, zone.Domain) === hostname
   );
 }
 
@@ -1218,14 +1384,59 @@ function matchesPattern(value, pattern) {
 
 /**
  * @param {string[]} patterns
+ * @param {string} name
  * @returns {string[]}
  */
-function normalizePatterns(patterns) {
-  return patterns.map((pattern) =>
-    pattern.trim().replace(/\.$/, "")
-      .toLowerCase()
-  )
-    .filter((pattern) => pattern.length > 0);
+function normalizePatterns(patterns, name) {
+  if (!Array.isArray(patterns)) {
+    throw new Error(`${name} must be an array of hostname patterns.`);
+  }
+
+  return patterns.map((pattern) => {
+    if (typeof pattern !== "string") {
+      throw new Error(`${name} contains a non-string hostname pattern.`);
+    }
+
+    const value = pattern.trim().toLowerCase();
+    const wildcard = value.startsWith("*.");
+    const hostname = normalizeHostname(wildcard ? value.slice(2) : value);
+    if (!hostname || value.includes("*") !== wildcard) {
+      throw new Error(
+        `${name} patterns must be exact hostnames or begin with "*.".`,
+      );
+    }
+
+    return wildcard ? `*.${hostname}` : hostname;
+  });
+}
+
+/**
+ * @param {string} secret
+ * @returns {void}
+ */
+function validateSharedSecret(secret) {
+  if (
+    typeof secret !== "string" ||
+    secret.length < MIN_SHARED_SECRET_LENGTH ||
+    secret.length > MAX_SHARED_SECRET_LENGTH ||
+    !/^[\x21-\x7E]+$/.test(secret) ||
+    secret.includes(",")
+  ) {
+    throw new Error(
+      `DDNS shared secrets must be ${MIN_SHARED_SECRET_LENGTH} to ${MAX_SHARED_SECRET_LENGTH} printable ASCII characters without whitespace or commas.`,
+    );
+  }
+}
+
+/**
+ * @param {string} value
+ * @returns {string[]}
+ */
+function parseSharedSecretList(value) {
+  if (value === "") {
+    return [];
+  }
+  return value.split(",");
 }
 
 /**

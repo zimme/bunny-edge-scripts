@@ -1,7 +1,9 @@
 # Releasing
 
 Both packages use one lockstep Semantic Version. A pushed SemVer tag is the only
-release trigger. Branch pushes and manual workflow dispatches never publish.
+release trigger. Branch pushes and manual workflow dispatches never publish. The
+version `0.0.0` marks an unreleased source checkout; registry commands are valid
+only after a matching signed tag has completed the release workflow.
 
 ## One-Time Setup
 
@@ -29,18 +31,22 @@ job receives contents write access but no OIDC.
 
 ## Release Checklist
 
-1. Confirm `main` is current, clean, and passing `CI`, `CodeQL`, and Dependency
+1. Before the first release, generate release notes in dry-run mode and confirm
+   they describe only packages that still exist. In particular, removed
+   pre-release experiments must not appear as current features.
+2. Confirm `main` is current, clean, and passing `CI`, `CodeQL`, and Dependency
    Review.
-2. Choose the next version from the Conventional Commits since the previous
+3. Choose the next version from the Conventional Commits since the previous
    release.
-3. Run `deno task release:prepare 1.0.0`, replacing `1.0.0` with the chosen
-   version. It requires a clean worktree, updates all five manifests, and runs
-   the complete validation suite.
-4. Review all five manifest changes.
-5. Commit the version changes, for example
+4. Run `deno task release:prepare 1.0.0`, replacing `1.0.0` with the chosen
+   version. It requires a clean worktree, synchronizes package manifests,
+   scaffold defaults, and the checked DDNS example, then runs the complete
+   validation suite.
+5. Review the generated version changes.
+6. Commit the version changes, for example
    `git commit -S -am "chore(release): 1.0.0"`, and merge that commit through
    the normal protected-branch process.
-6. After the release commit is on `main`, update the remote-tracking branch and
+7. After the release commit is on `main`, update the remote-tracking branch and
    create a signed annotated tag with the guarded command:
 
    ```sh
@@ -49,9 +55,11 @@ job receives contents write access but no OIDC.
    git push origin 1.0.0
    ```
 
-7. Watch the `Release` workflow. It checks that the tag has no leading `v` and
+8. Watch the `Release` workflow. It checks that the tag has no leading `v` and
    exactly matches the root version plus every JSR and npm package version.
-8. Verify both packages on JSR and npm and inspect the GitHub release.
+9. Verify both packages on JSR and npm, test the documented `deno create`,
+   `deno add`, and npm commands in clean directories, and inspect the GitHub
+   release.
 
 Git has no native pre-tag hook. `deno task release:tag` is the repository's safe
 tag-creation interface: it checks the clean worktree, branch, remote commit,

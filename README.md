@@ -1,380 +1,99 @@
 # Bunny Edge Scripts
 
-A Deno-first, open-source collection of independently deployable
-[bunny.net Edge Scripts](https://bunny.net/edge-scripting/) and their supporting
-tools.
+A Deno-first collection of independent, open-source
+[bunny.net Edge Scripts](https://bunny.net/edge-scripting/) and deployment
+tools. Each runtime package solves one edge use case and can be deployed without
+the others.
 
-Each edge script solves a distinct problem and can be installed and deployed on
-its own. The collection currently provides secure dynamic DNS for domains
-managed by bunny.net. More edge scripts can be added without making them
-dependencies of one another.
+> Registry installation requires a signed release. A source manifest at `0.0.0`
+> is an unreleased development version; verify the linked registry before
+> running a package command.
 
-## Edge Scripts
+## Catalog
 
-| Edge script                                                        | Purpose                                                                                               | Use it when                                                                                   |
-| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| [`@zimme/bunny-ddns-edge-script`](packages/bunny-ddns-edge-script) | DynDNS-compatible API that updates Bunny DNS without exposing your Bunny account key to DDNS clients. | A router, NAS, or inadyn client must keep a hostname pointed at a changing public IP address. |
+### Edge Scripts
 
-## Supporting Tools
+| Package                                                            | Purpose                                                                                                                                | Registry                                                                                                                 |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| [`@zimme/bunny-ddns-edge-script`](packages/bunny-ddns-edge-script) | A secure DynDNS-compatible API for Bunny DNS. DDNS clients use a limited shared secret while the Bunny account API key stays in Bunny. | [JSR](https://jsr.io/@zimme/bunny-ddns-edge-script) / [npm](https://www.npmjs.com/package/@zimme/bunny-ddns-edge-script) |
 
-| Tool                                                     | Purpose                                                                               |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| [`@zimme/create-bunny-ddns`](packages/create-bunny-ddns) | Generates and validates a minimal personal deployment repository for the DDNS script. |
+### Tools
 
-The DDNS runtime package powers the deployed Edge Script. Its generator creates
-a small, user-owned Git repository that imports and deploys that runtime
-package. The generator is development tooling; it does not run on bunny.net.
+| Package                                                  | Purpose                                                                                                                         | Registry                                                                                                       |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| [`@zimme/create-bunny-ddns`](packages/create-bunny-ddns) | Generates a minimal, Deno-based repository for deploying the DDNS Edge Script through Bunny Git integration or a GitHub Action. | [JSR](https://jsr.io/@zimme/create-bunny-ddns) / [npm](https://www.npmjs.com/package/@zimme/create-bunny-ddns) |
 
-The DDNS script is not a reverse tunnel and does not provide NAT traversal. Use
-it when your service is intentionally reachable through an inbound port but its
-public IP address can change.
+The DDNS script is not a reverse tunnel and does not provide NAT traversal. It
+is for services that are intentionally reachable through an inbound port but
+whose public IP address can change.
 
-## Why DDNS
+## DDNS Setup
 
-Dynamic DNS clients usually need a provider credential. For Bunny DNS, the
-credential with enough power to update records is your Bunny account API key.
-The DDNS package keeps that key inside Bunny Edge Scripting as a secret and
-gives clients a separate DDNS secret with optional hostname and zone guardrails.
+For the complete runtime API, configuration, deployment settings, and DDNS
+client examples, read the
+[`@zimme/bunny-ddns-edge-script` documentation](packages/bunny-ddns-edge-script).
+For generator commands, options, output, and deployment modes, read the
+[`@zimme/create-bunny-ddns` documentation](packages/create-bunny-ddns).
 
-## Distribution
+### From This Source Checkout
 
-Both packages are published independently to JSR and npm.
+To work from an unreleased source checkout, run the generator directly:
 
-The Bunny deployment repo generated by this project is Deno-only by default and
-treats the bundled `generated/script.ts` output as a deployment artifact. That
-keeps consumer repos readable while still supporting Bunny's Git integration,
-GitHub Actions, and manual paste-to-editor deployment.
+```sh
+deno run --allow-read --allow-write --allow-run=deno \
+  packages/create-bunny-ddns/src/main.ts my-bunny-ddns \
+  --allowed-hosts home.example.com --no-install
+```
 
-WASM is intentionally not the primary distribution: this workload is dominated
-by request validation and Bunny API calls, so a JS/TS package is simpler and
-fits Bunny Edge Scripting directly.
-
-Bunny Edge Scripting itself runs TypeScript directly on a Deno-based runtime, so
-a bundler is not inherently required. The remaining bundler step in this repo
-exists only to turn the example package-based entrypoint into one self-contained
-script file for deploy paths that upload a single script.
-
-## Set Up DDNS
+The generated project references the monorepo's current package version. Keep
+`--no-install` when that version is not present in the registries. Release
+preparation updates the generator default automatically.
 
 ### Ask An AI Agent
 
-Give a coding agent this prompt:
+During source development, give an agent working from this checkout:
 
 > Set up Bunny DDNS for me in a new private GitHub repository named
-> `<repo-name>` using <https://github.com/zimme/bunny-edge-scripts>. Read and
-> follow `AI_SETUP.md` and the `setup-bunny-ddns` Agent Skill from that
-> repository. Ask me only for missing hostname or zone scope. Never ask for
-> credentials or run `deno task provision`. Use Bunny's Git integration, finish
-> every non-secret step, and give me a precise dashboard or private-terminal
-> handoff for the remaining credential entry.
+> `<repo-name>` using <https://github.com/zimme/bunny-edge-scripts>. Then verify
+> that the required package version is published, read and follow `AI_SETUP.md`,
+> and use the checked-out generator with `--no-install` if it is not. Never ask
+> for credentials or run `deno task provision`. Ask me for the hostname or zone
+> scope, complete every non-secret step, and stop for my Bunny dashboard or
+> private-terminal actions.
 
-Replace `<repo-name>` and change `private` to `public` when appropriate. The
-agent-facing [AI setup runbook](AI_SETUP.md) defines the deterministic commands,
-security boundaries, validation, GitHub creation, and Bunny dashboard handoff.
-
-### Run The Generator
-
-To create a personal deployment repo, use the scaffold generator:
+For a published release, the preferred setup path is:
 
 ```sh
 deno create jsr:@zimme/create-bunny-ddns -- my-bunny-ddns
 ```
 
-The npm compatibility entrypoint also works:
+The npm compatibility forms will also be:
 
 ```sh
 npm exec @zimme/create-bunny-ddns
-```
-
-With npm's initializer shorthand, the generator is also available as:
-
-```sh
 npm init @zimme/bunny-ddns
 ```
 
-The generator asks only for non-secret setup choices, resolves dependencies, and
-creates a `deno.lock`. It never requests Bunny credentials or needs Bunny
-network access. Generated repositories provide dashboard instructions and an
-optional `deno task provision` command that the user runs only in a separate
-private terminal after ending AI sessions. That command asks for both
-credentials with hidden input and never prints or saves them. It emits a
-non-secret `SAFE AI HANDOFF` block the user can paste back so the agent can
-continue with Git integration and deployment guidance.
+## Security Model
 
-### Manual DDNS Install
+- The Bunny account API key remains a Bunny Environment Secret.
+- DDNS clients receive a separate long, random shared secret.
+- HTTPS and HTTP Basic Auth are required by default.
+- Update addresses must be explicit request parameters; forwarding headers are
+  never trusted as the DNS mutation value.
+- Hostname and zone allow lists scope authority. When both are configured, a
+  request must match both lists.
+- Deny lists always win.
+- With no allow list, account-wide access requires the explicit
+  `DDNS_ALLOW_ALL_HOSTS=true` acknowledgement.
+- Ambiguous multi-record sets are rejected by default.
 
-In your Bunny Edge Script repository:
+See [SECURITY.md](SECURITY.md) for the threat model and credential-safe agent
+workflow.
 
-```sh
-deno add jsr:@zimme/bunny-ddns-edge-script
-```
+## Development
 
-npm compatibility is also available:
-
-```sh
-deno add npm:@zimme/bunny-ddns-edge-script
-```
-
-Then create `script.ts`:
-
-```ts
-import * as BunnySDK from "@bunny.net/edgescript-sdk";
-import {
-  createBunnyDdnsHandler,
-  readBunnyDdnsConfigFromEnv,
-} from "@zimme/bunny-ddns-edge-script";
-
-const config = readBunnyDdnsConfigFromEnv({
-  get(name: string) {
-    return Deno.env.get(name);
-  },
-});
-
-BunnySDK.net.http.serve(createBunnyDdnsHandler({ config }));
-```
-
-See [examples/edge-script-repo](examples/edge-script-repo) for a complete
-minimal repo shape.
-
-### Deploy DDNS With Bunny Git
-
-Bunny's Git integration supports install, build, and entry-file settings. A good
-setup for a repo using this package is:
-
-| Setting         | Value                   |
-| --------------- | ----------------------- |
-| Install command | `deno install --frozen` |
-| Build command   | `deno task build`       |
-| Entry file      | `generated/script.ts`   |
-
-If your script is already self-contained, Bunny can deploy `script.ts` directly
-and you can skip the bundle step entirely. The package-based setup in this repo
-still builds `generated/script.ts` because Bunny's deploy surfaces ultimately
-upload one script file, not an npm dependency tree.
-
-Example `deno.json`:
-
-```json
-{
-  "imports": {
-    "@zimme/bunny-ddns-edge-script": "jsr:@zimme/bunny-ddns-edge-script@^1.0.0"
-  },
-  "tasks": {
-    "build": "deno bundle --external @bunny.net/edgescript-sdk script.ts -o generated/script.ts && deno fmt generated/script.ts"
-  }
-}
-```
-
-That produces one uploadable `generated/script.ts` file while keeping your
-source repo tiny and readable.
-
-If you prefer the GitHub Action deployment path, use Bunny's
-`BunnyWay/actions/deploy-script` action after the same build step and set
-`file: generated/script.ts`.
-
-For a no-bundle workflow, point Bunny's GitHub Action or Git integration entry
-file directly at `script.ts`, but only if that file already contains everything
-needed at runtime.
-
-If you prefer manual editor deployment, build the same file and paste
-`generated/script.ts` into Bunny's script editor. The generated file is a deploy
-artifact, not the place to maintain your source.
-
-The separate, user-owned provisioning task can create and configure the Bunny
-Edge Script through the official Scripting API. The scaffold generator itself
-never requests credentials. Connecting the repository still uses Bunny's
-dashboard GitHub authorization flow.
-
-## What It Provides
-
-### DDNS
-
-- Secure DynDNS-style update endpoint: `GET /nic/update`.
-- Alias endpoint: `GET /update`.
-- Check-IP endpoints: `GET /checkip`, `GET /nic/checkip`, `GET /ip`.
-- HTTP Basic Auth only. Query-string credentials are rejected.
-- HTTPS required by default.
-- Account-wide Bunny DNS zone discovery by default.
-- Optional allow and deny lists for hostnames and zones. Deny always wins.
-- Automatic creation of missing `A` and `AAAA` records by default.
-- Safe default for existing Bunny DNS record sets: ambiguous multi-record
-  hostnames are rejected unless you explicitly opt in to updating all records.
-
-## How DDNS Works
-
-```mermaid
-sequenceDiagram
-    participant inadyn
-    participant edge as Your Bunny Edge Script
-    participant pkg as bunny-ddns-edge-script
-    participant api as bunny.net API
-    inadyn->>edge: GET /nic/update?hostname=home.example.com&myip=203.0.113.10
-    edge->>pkg: Request
-    pkg->>pkg: Require HTTPS and Basic Auth
-    pkg->>api: List DNS zones
-    api-->>pkg: Zones and records
-    pkg->>pkg: Pick longest matching zone and apply allow/deny rules
-    pkg->>api: Update or create A/AAAA record
-    api-->>pkg: 204/201 success
-    pkg-->>inadyn: good 203.0.113.10
-```
-
-## DDNS API
-
-### Update
-
-```text
-GET https://<your-script-host>/nic/update?hostname=<fqdn>&myip=<ip>
-Authorization: Basic base64(username:ddns-secret)
-```
-
-Supported query parameters:
-
-| Parameter  | Description                                              |
-| ---------- | -------------------------------------------------------- |
-| `hostname` | Required. One FQDN or a comma-separated list of FQDNs.   |
-| `myip`     | Explicit primary IP address to publish.                  |
-| `myip6`    | Optional additional IPv6 address for dual-stack updates. |
-| `ip`       | Compatibility alias for `myip`.                          |
-
-At least one of `myip`, `ip`, or `myip6` is required. The update endpoint does
-not infer a mutable target IP from request headers. Use `/checkip` first when a
-client needs address discovery.
-
-The endpoint returns DynDNS-style plain text:
-
-| Response     | Meaning                                                                          |
-| ------------ | -------------------------------------------------------------------------------- |
-| `good <ip>`  | Record was created or changed.                                                   |
-| `nochg <ip>` | Record already had that address.                                                 |
-| `badauth`    | Missing or invalid Basic Auth credentials.                                       |
-| `badagent`   | Insecure transport or unsupported request shape.                                 |
-| `badip`      | The supplied IP address is missing, invalid, or conflicting.                     |
-| `notfqdn`    | The hostname is not a valid FQDN.                                                |
-| `nohost`     | No matching Bunny DNS zone or no record when auto-create is disabled.            |
-| `!yours`     | Hostname or zone was blocked by allow/deny configuration.                        |
-| `dnserr`     | DNS record state is ambiguous, usually multiple records with the same name/type. |
-| `911`        | Bunny API or script-side failure. Retry later.                                   |
-
-For compatibility with DDNS clients, protocol-level responses are returned in
-the body. Authentication failures use HTTP 401, transport/method failures use
-HTTP errors, and normal DDNS result codes use HTTP 200. For multiple hostnames,
-the response has one line per hostname.
-
-### Check IP
-
-```text
-GET https://<your-script-host>/checkip
-```
-
-This returns the first valid address found in common forwarding headers. Bunny
-does not document which client-address header it sanitizes, so verify this
-endpoint on your deployed script before relying on it. It does not require
-authentication, but it still requires HTTPS unless local insecure mode is
-enabled. Updates never use these headers as the DNS value.
-
-## DDNS Runtime Configuration
-
-Configure these on the Bunny Edge Script under Env Configuration. Use Bunny
-secrets for sensitive values.
-
-| Name                       | Required | Description                                                                                                   |
-| -------------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
-| `BUNNY_API_KEY`            | Yes      | Bunny account API key used by the script to list and mutate DNS records. `BUNNY_ACCESS_KEY` is also accepted. |
-| `DDNS_SHARED_SECRET`       | Yes      | Password inadyn sends through HTTP Basic Auth.                                                                |
-| `DDNS_SHARED_SECRETS`      | No       | Comma-separated secrets for rotation. Overrides `DDNS_SHARED_SECRET` when set.                                |
-| `DDNS_USERNAME`            | No       | Require a specific Basic Auth username. If omitted, any username is accepted when the password is valid.      |
-| `DDNS_ALLOWED_HOSTS`       | No       | Comma-separated exact or wildcard host patterns, for example `home.example.com,*.home.example.net`.           |
-| `DDNS_DENIED_HOSTS`        | No       | Comma-separated exact or wildcard host patterns. Deny wins.                                                   |
-| `DDNS_ALLOWED_ZONES`       | No       | Comma-separated zone patterns, for example `example.com,*.example.net`.                                       |
-| `DDNS_DENIED_ZONES`        | No       | Comma-separated zone patterns. Deny wins.                                                                     |
-| `DDNS_ALLOW_ALL_HOSTS`     | No       | Default `false`. Set `true` only to explicitly grant access to every discovered Bunny zone.                   |
-| `DDNS_AUTO_CREATE`         | No       | Default `true`. Set `false` to update existing records only.                                                  |
-| `DDNS_TTL`                 | No       | Default `900`. TTL used for records created by the script.                                                    |
-| `DDNS_MULTI_RECORD_MODE`   | No       | Default `reject`. Set `update-all` to update every matching record with the same hostname/type.               |
-| `DDNS_MAX_HOSTNAMES`       | No       | Default `25`. Maximum hostnames accepted in one update request.                                               |
-| `DDNS_MAX_MUTATIONS`       | No       | Default and maximum `40`. Rejects requests that could exceed Bunny's per-request subrequest budget.           |
-| `DDNS_RECORD_COMMENT`      | No       | Comment used for newly created DNS records.                                                                   |
-| `DDNS_ALLOW_INSECURE_HTTP` | No       | Default `false`. Set `true` only for local development.                                                       |
-| `DDNS_API_BASE_URL`        | No       | Default `https://api.bunny.net`. Mostly useful for tests.                                                     |
-
-## DDNS Inadyn Example
-
-Replace `ddns.example.com` with the hostname assigned to your Bunny Edge Script.
-Inadyn wants server names without `https://`.
-
-```conf
-custom bunny-ddns-edge-script {
-    username       = "inadyn"
-    password       = "use-a-long-random-ddns-secret"
-
-    checkip-server = "ddns.example.com"
-    checkip-path   = "/checkip"
-    checkip-ssl    = true
-
-    ddns-server    = "ddns.example.com"
-    ddns-path      = "/nic/update?hostname=%h&myip=%i"
-    ssl            = true
-
-    hostname       = "home.example.com"
-}
-```
-
-Multiple hostnames can be configured in inadyn as usual:
-
-```conf
-hostname = { "home.example.com", "vpn.example.com" }
-```
-
-For clients that can send IPv6 directly, use `myip6`:
-
-```text
-/nic/update?hostname=home.example.com&myip=203.0.113.10&myip6=2001:db8::10
-```
-
-## DDNS Library API
-
-```ts
-import {
-  createBunnyDdnsHandler,
-  readBunnyDdnsConfigFromEnv,
-} from "@zimme/bunny-ddns-edge-script";
-```
-
-Exports:
-
-- `createBunnyDdnsHandler(options)`
-- `readBunnyDdnsConfigFromEnv(env)`
-- Type exports for `RuntimeConfig`, `HandlerOptions`, `Fetcher`, `EnvReader`,
-  and `MultiRecordMode`
-
-The package root intentionally keeps the stable public API small. Helper
-functions used internally by the package are not exported from
-`@zimme/bunny-ddns-edge-script`.
-
-That packaging choice is also why the example repo still bundles for deployment:
-the source `script.ts` imports `@zimme/bunny-ddns-edge-script`, but Bunny's
-deployment API and official GitHub Action upload one script file at a time.
-
-## Versioning
-
-This project uses Semantic Versioning and Conventional Commits. Both packages
-share one lockstep version. Only pushing a SemVer tag such as `1.0.0` starts a
-release. The tagged commit must already contain that exact version in every
-manifest. The release workflow validates and publishes that immutable commit,
-then generates Conventional Changelog release notes and a complete changelog
-asset on GitHub.
-
-See [RELEASING.md](RELEASING.md) for the OIDC trusted-publishing setup and
-release checklist.
-
-## Local Development
-
-The supported development environment is the Docker Compose-backed Dev Container
-in `.devcontainer/`. Open the repository in VS Code Dev Containers, GitHub
-Codespaces, or start it from a host with Docker and Deno. The bootstrap command
-downloads the exact Dev Container CLI version when it is not already installed
-in the repository:
+Use the Docker Compose-backed Dev Container:
 
 ```sh
 deno task devcontainer:up
@@ -382,106 +101,10 @@ deno task devcontainer:exec deno task validate
 deno task devcontainer:down
 ```
 
-The container pins Deno, Node, npm, GitHub CLI, and GitHub Copilot CLI versions.
-Node and npm exist only to exercise and publish npm artifacts; repository tasks
-and dependency management remain Deno-native. Its Dev Container Features are
-also pinned by `.devcontainer/devcontainer-lock.json`. The `Dev Container`
-workflow publishes the resulting image to GHCR as `latest` and with an immutable
-commit tag whenever its definition or pinned tools change on `main`. Local
-development, CI, release jobs, and coding agents use that image as a build cache
-while still building from the checked-in Compose and Dev Container definitions.
-A missing cache therefore falls back to the same reproducible build instead of
-changing behavior. The Dockerfile copies dependency manifests before running
-`deno ci`, so the prebuild carries the locked `DENO_DIR` and platform bundler
-while source-only changes reuse that layer. Compose is the sole GHCR cache
-source; workflows do not maintain separate dependency caches.
-
-GitHub creates the container package as private on its first publication. The
-repository workflows authenticate with their scoped `GITHUB_TOKEN`, so they can
-use it immediately. After the first successful `Dev Container` workflow run,
-make `bunny-edge-scripts-devcontainer` public in its GitHub package settings to
-allow anonymous local and fork builds to use the cache as well.
-
-Docker Compose currently starts only the workspace service because the project
-has no database, queue, or other required service. Add future dependencies as
-Compose services so local development and CI continue to use the same topology.
-
-Inside the container, the normal commands are:
-
-```sh
-deno task setup
-deno task doctor
-deno task fmt
-deno task test
-deno task validate
-```
-
-`deno task validate` is the complete check used by CI. It verifies the pinned
-toolchain, performs a frozen dependency install, checks Conventional Commits,
-and runs formatting, spelling, agent configuration, linting, typechecking,
-public API documentation linting, tests, builds, smoke checks, dependency audit,
-and JSR/npm publication dry-runs. GitHub Actions sets `CI=true`; no separate
-CI-only script is maintained.
-
-Agent-wide project guidance lives in `AGENTS.md`. Focused workflows use the open
-Agent Skills format under `.agents/skills/`, with compatibility shims for GitHub
-Copilot, Claude Code, and Gemini CLI. Run `deno task agents:check` to validate
-instruction imports, skill metadata, UI metadata, and skill-directory symlinks.
-GitHub's special `copilot-setup-steps.yml` workflow runs for coding-agent tasks;
-its normal push and pull-request triggers are intentionally limited to changes
-to that workflow so they validate the bootstrap without duplicating CI.
-
-Host-side Deno commands remain available as a fallback. Use `deno install` when
-intentionally updating dependencies and `deno ci` for a frozen install from the
-committed lockfile.
-
-`dist/` is generated package output and is gitignored. `deno task build` or the
-package `prepack` step refreshes it locally when you need to verify or publish
-the npm tarball. The example repo builds
-`examples/edge-script-repo/generated/script.ts`, which is only a deployment
-artifact.
-
-## Security Defaults
-
-- The Bunny account API key is only stored in the Edge Script environment.
-- DDNS clients authenticate with a separate shared secret.
-- HTTPS is required unless `DDNS_ALLOW_INSECURE_HTTP=true`.
-- Passwords in query strings are rejected.
-- Update requests only use explicit IP query parameters, never forwarding
-  headers, to choose the DNS target.
-- Deny lists override allow lists.
-- An allow list is required unless account-wide access is explicitly
-  acknowledged with `DDNS_ALLOW_ALL_HOSTS=true`.
-- Missing records are created only when `DDNS_AUTO_CREATE=true`.
-- Multiple existing records for the same hostname and IP family are rejected by
-  default. This avoids accidentally flattening a Bunny DNS weighted or smart
-  record set into one dynamic address.
-- Mutation requests are preflighted against Bunny Edge Scripting's 50 subrequest
-  limit before any DNS record is changed.
-- Zone discovery is bounded to 10,000 zones to preserve that subrequest budget.
-- Multi-record and dual-stack changes are not transactional; a later Bunny API
-  failure can leave earlier mutations applied even when the response is `911`.
-
-This project does not implement DNS TXT proof by default. The script already has
-the Bunny API key, so a TXT-token flow adds setup work without meaningfully
-reducing the risk for the normal single-owner account case. For delegation,
-prefer `DDNS_ALLOWED_HOSTS`, `DDNS_ALLOWED_ZONES`, or separate script instances
-with different secrets.
-
-## References
-
-- [bunny.net Edge Scripting overview](https://docs.bunny.net/scripting)
-- [bunny.net GitHub integration](https://docs.bunny.net/scripting/github-integration)
-- [bunny.net Edge Script secrets](https://docs.bunny.net/scripting/secrets)
-- [bunny.net Edge Script limits](https://docs.bunny.net/scripting/limits)
-- [bunny.net Scripting API](https://docs.bunny.net/api-reference/scripting)
-- [Deno create templates](https://docs.deno.com/runtime/reference/cli/create/)
-- [Development Containers](https://containers.dev/)
-- [Dev Containers in CI](https://github.com/devcontainers/ci)
-- [GitHub Copilot coding-agent environment setup](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/customize-the-agent-environment)
-- [bunny.net DNS Zone API](https://docs.bunny.net/api-reference/core/dns-zone/list-dns-zones)
-- [inadyn custom DDNS providers](https://github.com/troglobit/inadyn)
+`deno task validate` is the complete local and CI check. Deno is the repository
+toolchain; Node and npm are retained only to validate and publish npm artifacts.
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [RELEASING.md](RELEASING.md).
 
 ## License
 
-MIT
+[MIT](LICENSE)

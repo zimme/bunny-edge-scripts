@@ -3,6 +3,11 @@ import {
   type Flags,
   runProgram,
 } from "conventional-changelog";
+import createConventionalCommitsPreset from "conventional-changelog-conventionalcommits";
+import {
+  curateReleaseWriterTransform,
+  type ReleaseCommit,
+} from "./release_notes.ts";
 import { assertReleaseVersion } from "./release_version.ts";
 
 const tag = Deno.env.get("RELEASE_TAG")?.trim();
@@ -87,15 +92,41 @@ async function generateChangelog(
   outputPath: string,
   flags: Flags,
 ): Promise<void> {
-  await runProgram(new ConventionalChangelog(Deno.cwd()), {
+  const generator = await createChangelogGenerator();
+  await runProgram(generator, {
     ...flags,
     infile: "",
     outfile: outputPath,
-    preset: "conventionalcommits",
   });
   if (!(await Deno.readTextFile(outputPath)).trim()) {
     throw new Error("Conventional Changelog produced empty release notes.");
   }
+}
+
+type WriterTransform = (
+  commit: ReleaseCommit,
+  context: unknown,
+) => unknown;
+
+interface CuratedPreset {
+  writer?: {
+    transform?: WriterTransform;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+async function createChangelogGenerator(): Promise<ConventionalChangelog> {
+  const preset = await createConventionalCommitsPreset() as CuratedPreset;
+  const transform = preset.writer?.transform;
+  if (!preset.writer || !transform) {
+    throw new Error("Conventional Commits preset has no writer transform.");
+  }
+  preset.writer.transform = curateReleaseWriterTransform(transform);
+
+  return new ConventionalChangelog(Deno.cwd()).config(
+    preset as Parameters<ConventionalChangelog["config"]>[0],
+  );
 }
 
 async function commandOutput(command: string, args: string[]): Promise<string> {

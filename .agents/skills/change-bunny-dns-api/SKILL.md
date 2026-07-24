@@ -15,5 +15,5 @@ description: Modify or review Bunny DNS zone discovery, record matching, record 
    making the first write.
 5. Add tests for pagination, root records, zone selection, mutation payloads,
    partial-failure prevention, and upstream errors as applicable.
-6. Update API and operational documentation, then run `npm run validate` inside
-   the Dev Container.
+6. Update API and operational documentation, then run `deno task validate`
+   inside the Dev Container.

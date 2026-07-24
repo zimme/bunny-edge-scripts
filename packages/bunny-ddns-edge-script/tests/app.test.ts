@@ -1,4 +1,5 @@
 import {
+  type BunnyDnsRecord,
   type BunnyDnsZone,
   createHandler,
   DNS_RECORD_TYPE_A,
@@ -7,6 +8,12 @@ import {
   readConfigFromEnv,
   type RuntimeConfig,
 } from "../src/app.js";
+
+type RecordListItem = Omit<BunnyDnsRecord, "Type"> & { Type?: number };
+
+const DDNS_SECRET = "0123456789abcdef0123456789abcdef";
+const OLD_DDNS_SECRET = "old-0123456789abcdef0123456789ab";
+const NEW_DDNS_SECRET = "new-0123456789abcdef0123456789ab";
 
 function assertEqual<T>(actual: T, expected: T): void {
   if (actual !== expected) {
@@ -48,7 +55,7 @@ function config(overrides: Partial<RuntimeConfig> = {}): RuntimeConfig {
   return {
     apiBaseUrl: "https://api.bunny.net",
     bunnyApiKey: "account-api-key",
-    sharedSecrets: ["ddns-secret"],
+    sharedSecrets: [DDNS_SECRET],
     username: "inadyn",
     allowedHosts: [],
     deniedHosts: [],
@@ -66,7 +73,7 @@ function config(overrides: Partial<RuntimeConfig> = {}): RuntimeConfig {
   };
 }
 
-function auth(password = "ddns-secret", username = "inadyn"): string {
+function auth(password = DDNS_SECRET, username = "inadyn"): string {
   return `Basic ${btoa(`${username}:${password}`)}`;
 }
 
@@ -98,9 +105,24 @@ function makeFetch(
 
     if (method === "GET" && path === "/dnszone") {
       return Promise.resolve(Response.json({
-        Items: zones,
+        Items: zones.map(({ Id, Domain }) => ({ Id, Domain })),
         CurrentPage: 1,
         TotalItems: zones.length,
+        HasMoreItems: false,
+      }));
+    }
+
+    const recordsMatch = path.match(/^\/dnszone\/(\d+)\/records$/);
+    if (method === "GET" && recordsMatch) {
+      const zone = zones.find((item) => item.Id === Number(recordsMatch[1]));
+      const type = Number(url.searchParams.get("type"));
+      const records = (zone?.Records ?? []).filter((record) =>
+        record.Type === type
+      );
+      return Promise.resolve(Response.json({
+        Items: records,
+        CurrentPage: 1,
+        TotalItems: records.length,
         HasMoreItems: false,
       }));
     }
@@ -153,25 +175,88 @@ function makePagedFetch(
     const method = init.method ?? "GET";
     events.push({ method, path: `${url.pathname}?${url.searchParams}` });
 
-    if (method !== "GET" || url.pathname !== "/dnszone") {
-      return Promise.resolve(new Response("unexpected", { status: 500 }));
+    if (method === "GET" && url.pathname === "/dnszone") {
+      const page = Number(url.searchParams.get("page") ?? "1");
+      const items = (pages[page - 1] ?? []).map(({ Id, Domain }) => ({
+        Id,
+        Domain,
+      }));
+      return Promise.resolve(Response.json({
+        Items: items,
+        CurrentPage: page,
+        TotalItems: pages.flat().length,
+        HasMoreItems: page < pages.length,
+      }));
     }
 
-    const page = Number(url.searchParams.get("page") ?? "1");
-    const items = pages[page - 1] ?? [];
-    return Promise.resolve(Response.json({
-      Items: items,
-      CurrentPage: page,
-      TotalItems: pages.flat().length,
-      HasMoreItems: page < pages.length,
-    }));
+    const recordsMatch = url.pathname.match(/^\/dnszone\/(\d+)\/records$/);
+    if (method === "GET" && recordsMatch) {
+      const zone = pages.flat().find((item) =>
+        item.Id === Number(recordsMatch[1])
+      );
+      const type = Number(url.searchParams.get("type"));
+      const records = (zone?.Records ?? []).filter((record) =>
+        record.Type === type
+      );
+      return Promise.resolve(Response.json({
+        Items: records,
+        CurrentPage: 1,
+        TotalItems: records.length,
+        HasMoreItems: false,
+      }));
+    }
+
+    return Promise.resolve(new Response("unexpected", { status: 500 }));
+  };
+}
+
+function makeRecordPagedFetch(
+  zone: BunnyDnsZone,
+  recordPages: RecordListItem[][],
+  events: Array<{ method: string; path: string; body?: unknown }> = [],
+): Fetcher {
+  return (input, init = {}) => {
+    const url = new URL(input.toString());
+    const method = init.method ?? "GET";
+    events.push({ method, path: `${url.pathname}?${url.searchParams}` });
+
+    if (method === "GET" && url.pathname === "/dnszone") {
+      return Promise.resolve(Response.json({
+        Items: [{ Id: zone.Id, Domain: zone.Domain }],
+        CurrentPage: 1,
+        TotalItems: 1,
+        HasMoreItems: false,
+      }));
+    }
+
+    if (
+      method === "GET" &&
+      url.pathname === `/dnszone/${zone.Id}/records`
+    ) {
+      const page = Number(url.searchParams.get("page") ?? "1");
+      const type = Number(url.searchParams.get("type"));
+      const records = (recordPages[page - 1] ?? []).filter((record) =>
+        record.Type === undefined || record.Type === type
+      );
+      return Promise.resolve(Response.json({
+        Items: records,
+        CurrentPage: page,
+        TotalItems: recordPages.flat().length,
+        HasMoreItems: page < recordPages.length,
+      }));
+    }
+
+    return Promise.resolve(new Response("unexpected", { status: 500 }));
   };
 }
 
 Deno.test("reads required and optional configuration from environment values", () => {
   const values = new Map([
     ["BUNNY_API_KEY", "account-api-key"],
-    ["DDNS_SHARED_SECRETS", "old-secret,new-secret"],
+    [
+      "DDNS_SHARED_SECRETS",
+      `${OLD_DDNS_SECRET},${NEW_DDNS_SECRET}`,
+    ],
     ["DDNS_USERNAME", "inadyn"],
     ["DDNS_ALLOWED_HOSTS", "home.example.com,*.lan.example.com"],
     ["DDNS_DENIED_ZONES", "blocked.example.com"],
@@ -189,7 +274,10 @@ Deno.test("reads required and optional configuration from environment values", (
     },
   });
 
-  assertDeepEqual(parsed.sharedSecrets, ["old-secret", "new-secret"]);
+  assertDeepEqual(parsed.sharedSecrets, [
+    OLD_DDNS_SECRET,
+    NEW_DDNS_SECRET,
+  ]);
   assertEqual(parsed.username, "inadyn");
   assertDeepEqual(parsed.allowedHosts, [
     "home.example.com",
@@ -222,13 +310,73 @@ Deno.test("requires Bunny API and DDNS secrets in configuration", () => {
   );
 });
 
+Deno.test("treats the singular secret as one exact credential", () => {
+  const parsed = readConfigFromEnv({
+    get(name: string) {
+      const values: Record<string, string> = {
+        BUNNY_API_KEY: "account-api-key",
+        DDNS_SHARED_SECRET: DDNS_SECRET,
+        DDNS_ALLOW_ALL_HOSTS: "true",
+      };
+      return values[name];
+    },
+  });
+
+  assertDeepEqual(parsed.sharedSecrets, [DDNS_SECRET]);
+});
+
+Deno.test("rejects weak or ambiguous DDNS shared secrets", () => {
+  for (
+    const secret of [
+      "too-short",
+      `${DDNS_SECRET} `,
+      `${DDNS_SECRET.slice(0, 16)},${DDNS_SECRET.slice(16)}`,
+      "x".repeat(257),
+    ]
+  ) {
+    assertThrows(() =>
+      readConfigFromEnv({
+        get(name: string) {
+          const values: Record<string, string> = {
+            BUNNY_API_KEY: "account-api-key",
+            DDNS_SHARED_SECRET: secret,
+            DDNS_ALLOW_ALL_HOSTS: "true",
+          };
+          return values[name];
+        },
+      })
+    );
+  }
+
+  for (
+    const secrets of [
+      `${OLD_DDNS_SECRET}, ${NEW_DDNS_SECRET}`,
+      `${OLD_DDNS_SECRET},,${NEW_DDNS_SECRET}`,
+      `${OLD_DDNS_SECRET}\n${NEW_DDNS_SECRET}`,
+    ]
+  ) {
+    assertThrows(() =>
+      readConfigFromEnv({
+        get(name: string) {
+          const values: Record<string, string> = {
+            BUNNY_API_KEY: "account-api-key",
+            DDNS_SHARED_SECRETS: secrets,
+            DDNS_ALLOW_ALL_HOSTS: "true",
+          };
+          return values[name];
+        },
+      })
+    );
+  }
+});
+
 Deno.test("rejects invalid security configuration instead of failing open", () => {
   assertThrows(() =>
     readConfigFromEnv({
       get(name: string) {
         const values: Record<string, string> = {
           BUNNY_API_KEY: "account-api-key",
-          DDNS_SHARED_SECRET: "secret",
+          DDNS_SHARED_SECRET: DDNS_SECRET,
           DDNS_AUTO_CREATE: "flase",
         };
         return values[name];
@@ -241,13 +389,28 @@ Deno.test("rejects invalid security configuration instead of failing open", () =
       get(name: string) {
         const values: Record<string, string> = {
           BUNNY_API_KEY: "account-api-key",
-          DDNS_SHARED_SECRET: "secret",
+          DDNS_SHARED_SECRET: DDNS_SECRET,
           DDNS_MAX_MUTATIONS: "41",
         };
         return values[name];
       },
     })
   );
+
+  for (const pattern of ["*", "home.*.example.com", "*.localhost"]) {
+    assertThrows(() =>
+      readConfigFromEnv({
+        get(name: string) {
+          const values: Record<string, string> = {
+            BUNNY_API_KEY: "account-api-key",
+            DDNS_SHARED_SECRET: DDNS_SECRET,
+            DDNS_ALLOWED_HOSTS: pattern,
+          };
+          return values[name];
+        },
+      })
+    );
+  }
 });
 
 Deno.test("updates an existing A record using the DynDNS endpoint", async () => {
@@ -277,9 +440,10 @@ Deno.test("updates an existing A record using the DynDNS endpoint", async () => 
   assertEqual(zones[0].Records?.[0].Value, "203.0.113.7");
   assertDeepEqual(events.map((event) => `${event.method} ${event.path}`), [
     "GET /dnszone",
+    "GET /dnszone/1/records",
     "POST /dnszone/1/records/101",
   ]);
-  assertDeepEqual(events[1].body, {
+  assertDeepEqual(events[2].body, {
     Type: DNS_RECORD_TYPE_A,
     Ttl: 900,
     Value: "203.0.113.7",
@@ -317,8 +481,44 @@ Deno.test("paginates Bunny DNS zones before choosing the matching zone", async (
   assertEqual(response.status, 200);
   assertEqual(await response.text(), "nochg 203.0.113.7\n");
   assertDeepEqual(events.map((event) => event.path), [
-    "/dnszone?page=1&perPage=1000",
-    "/dnszone?page=2&perPage=1000",
+    "/dnszone?page=1&perPage=1000&view=1",
+    "/dnszone?page=2&perPage=1000&view=1",
+    "/dnszone/2/records?page=1&perPage=1000&type=0",
+  ]);
+});
+
+Deno.test("paginates records for the selected Bunny DNS zone", async () => {
+  const events: Array<{ method: string; path: string; body?: unknown }> = [];
+  const handler = createHandler({
+    config: config(),
+    fetcher: makeRecordPagedFetch(
+      { Id: 1, Domain: "example.com" },
+      [
+        [{
+          Id: 100,
+          Type: DNS_RECORD_TYPE_A,
+          Value: "203.0.113.1",
+          Name: "other",
+        }],
+        [{
+          Id: 101,
+          Value: "203.0.113.7",
+          Name: "home",
+        }],
+      ],
+      events,
+    ),
+  });
+
+  const response = await handler(
+    makeRequest("/nic/update?hostname=home.example.com&myip=203.0.113.7"),
+  );
+
+  assertEqual(await response.text(), "nochg 203.0.113.7\n");
+  assertDeepEqual(events.map((event) => event.path), [
+    "/dnszone?page=1&perPage=1000&view=1",
+    "/dnszone/1/records?page=1&perPage=1000&type=0",
+    "/dnszone/1/records?page=2&perPage=1000&type=0",
   ]);
 });
 
@@ -369,6 +569,7 @@ Deno.test("creates missing records when auto-create is enabled", async () => {
   assertEqual(zones[0].Records?.[0].Value, "203.0.113.9");
   assertDeepEqual(events.map((event) => `${event.method} ${event.path}`), [
     "GET /dnszone",
+    "GET /dnszone/1/records",
     "PUT /dnszone/1/records",
   ]);
 });
@@ -497,6 +698,35 @@ Deno.test("can update all matching records when explicitly configured", async ()
   );
 });
 
+Deno.test("ignores disabled records when choosing a DDNS target", async () => {
+  const zones: BunnyDnsZone[] = [{
+    Id: 1,
+    Domain: "example.com",
+    Records: [{
+      Id: 101,
+      Type: DNS_RECORD_TYPE_A,
+      Value: "203.0.113.1",
+      Name: "home",
+      Disabled: true,
+    }],
+  }];
+  const handler = createHandler({
+    config: config(),
+    fetcher: makeFetch(zones),
+  });
+
+  const response = await handler(
+    makeRequest("/nic/update?hostname=home.example.com&myip=203.0.113.9"),
+  );
+
+  assertEqual(await response.text(), "good 203.0.113.9\n");
+  assertEqual(zones[0].Records?.length, 2);
+  assertEqual(zones[0].Records?.[0].Value, "203.0.113.1");
+  assertEqual(zones[0].Records?.[0].Disabled, true);
+  assertEqual(zones[0].Records?.[1].Value, "203.0.113.9");
+  assertEqual(zones[0].Records?.[1].Disabled, false);
+});
+
 Deno.test("deny lists win over allow lists", async () => {
   const handler = createHandler({
     config: config({
@@ -512,6 +742,40 @@ Deno.test("deny lists win over allow lists", async () => {
 
   assertEqual(response.status, 200);
   assertEqual(await response.text(), "!yours\n");
+});
+
+Deno.test("requires both allow-host and allow-zone rules when both are set", async () => {
+  const zones: BunnyDnsZone[] = [{
+    Id: 1,
+    Domain: "example.com",
+    Records: [],
+  }];
+  const allowed = createHandler({
+    config: config({
+      allowAllHosts: false,
+      allowedHosts: ["HOME.EXAMPLE.COM."],
+      allowedZones: ["EXAMPLE.COM."],
+    }),
+    fetcher: makeFetch(zones),
+  });
+  const blocked = createHandler({
+    config: config({
+      allowAllHosts: false,
+      allowedHosts: ["home.example.com"],
+      allowedZones: ["other.example.com"],
+    }),
+    fetcher: makeFetch(zones),
+  });
+
+  const allowedResponse = await allowed(
+    makeRequest("/nic/update?hostname=home.example.com&myip=203.0.113.9"),
+  );
+  const blockedResponse = await blocked(
+    makeRequest("/nic/update?hostname=home.example.com&myip=203.0.113.10"),
+  );
+
+  assertEqual(await allowedResponse.text(), "good 203.0.113.9\n");
+  assertEqual(await blockedResponse.text(), "!yours\n");
 });
 
 Deno.test("zone deny lists block otherwise valid hostnames", async () => {
@@ -675,12 +939,20 @@ Deno.test("returns 911 when Bunny rejects a DNS mutation", async () => {
           Items: [{
             Id: 1,
             Domain: "example.com",
-            Records: [{
-              Id: 101,
-              Type: DNS_RECORD_TYPE_A,
-              Value: "198.51.100.1",
-              Name: "home",
-            }],
+          }],
+          HasMoreItems: false,
+        }));
+      }
+      if (
+        method === "GET" &&
+        url.pathname === "/dnszone/1/records"
+      ) {
+        return Promise.resolve(Response.json({
+          Items: [{
+            Id: 101,
+            Type: DNS_RECORD_TYPE_A,
+            Value: "198.51.100.1",
+            Name: "home",
           }],
           HasMoreItems: false,
         }));
@@ -698,6 +970,83 @@ Deno.test("returns 911 when Bunny rejects a DNS mutation", async () => {
 
   assertEqual(response.status, 200);
   assertEqual(await response.text(), "911\n");
+});
+
+Deno.test("a retry converges after a later dual-stack mutation fails", async () => {
+  const records = [
+    {
+      Id: 101,
+      Type: DNS_RECORD_TYPE_A,
+      Value: "203.0.113.1",
+      Name: "home",
+    },
+    {
+      Id: 102,
+      Type: DNS_RECORD_TYPE_AAAA,
+      Value: "2001:db8::1",
+      Name: "home",
+    },
+  ];
+  let failIpv6 = true;
+  const fetcher: Fetcher = (input, init = {}) => {
+    const url = new URL(input.toString());
+    const method = init.method ?? "GET";
+    if (method === "GET" && url.pathname === "/dnszone") {
+      return Promise.resolve(Response.json({
+        Items: [{ Id: 1, Domain: "example.com" }],
+        CurrentPage: 1,
+        HasMoreItems: false,
+      }));
+    }
+    if (method === "GET" && url.pathname === "/dnszone/1/records") {
+      const type = Number(url.searchParams.get("type"));
+      const items = records.filter((record) => record.Type === type);
+      return Promise.resolve(Response.json({
+        Items: items,
+        CurrentPage: 1,
+        HasMoreItems: false,
+      }));
+    }
+
+    const match = url.pathname.match(/^\/dnszone\/1\/records\/(\d+)$/);
+    if (method === "POST" && match) {
+      const record = records.find((item) => item.Id === Number(match[1]));
+      if (!record || typeof init.body !== "string") {
+        return Promise.resolve(new Response(null, { status: 404 }));
+      }
+      if (record.Type === DNS_RECORD_TYPE_AAAA && failIpv6) {
+        failIpv6 = false;
+        return Promise.resolve(new Response(null, { status: 500 }));
+      }
+      const body = JSON.parse(init.body) as { Value: string };
+      record.Value = body.Value;
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
+
+    return Promise.resolve(new Response(null, { status: 500 }));
+  };
+  const handler = createHandler({ config: config(), fetcher });
+  const path =
+    "/nic/update?hostname=home.example.com&myip=203.0.113.9&myip6=2001:db8::9";
+
+  const first = await withConsoleErrorSilenced(() =>
+    handler(makeRequest(path))
+  );
+  assertEqual(await first.text(), "911\n");
+  assertDeepEqual(records.map((record) => record.Value), [
+    "203.0.113.9",
+    "2001:db8::1",
+  ]);
+
+  const retry = await handler(makeRequest(path));
+  assertEqual(
+    await retry.text(),
+    "good 203.0.113.9,2001:db8::9\n",
+  );
+  assertDeepEqual(records.map((record) => record.Value), [
+    "203.0.113.9",
+    "2001:db8::9",
+  ]);
 });
 
 Deno.test("requires HTTPS unless local insecure mode is enabled", async () => {
@@ -772,7 +1121,45 @@ Deno.test("rejects requests that exceed the mutation budget before writing", asy
   );
 
   assertEqual(await response.text(), "numhost\n");
-  assertDeepEqual(events.map((event) => event.method), ["GET"]);
+  assertDeepEqual(events.map((event) => event.method), ["GET", "GET"]);
+});
+
+Deno.test("reserves the remaining Bunny subrequest budget before writes", async () => {
+  let calls = 0;
+  let writes = 0;
+  const handler = createHandler({
+    config: config(),
+    fetcher: (input, init = {}) => {
+      calls += 1;
+      const url = new URL(input.toString());
+      const method = init.method ?? "GET";
+      if (method !== "GET") {
+        writes += 1;
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      if (url.pathname === "/dnszone") {
+        return Promise.resolve(Response.json({
+          Items: [{ Id: 1, Domain: "example.com" }],
+          CurrentPage: 1,
+          HasMoreItems: false,
+        }));
+      }
+      const page = Number(url.searchParams.get("page") ?? "1");
+      return Promise.resolve(Response.json({
+        Items: [],
+        CurrentPage: page,
+        HasMoreItems: page < 49,
+      }));
+    },
+  });
+
+  const response = await handler(
+    makeRequest("/nic/update?hostname=home.example.com&myip=203.0.113.9"),
+  );
+
+  assertEqual(await response.text(), "numhost\n");
+  assertEqual(calls, 50);
+  assertEqual(writes, 0);
 });
 
 Deno.test("rejects query-string credentials", async () => {
@@ -824,6 +1211,16 @@ Deno.test("validates direct handler configuration before serving", () => {
         allowedHosts: [],
         allowedZones: [],
       }),
+    })
+  );
+  assertThrows(() =>
+    createHandler({
+      config: config({ deniedHosts: ["home.*.example.com"] }),
+    })
+  );
+  assertThrows(() =>
+    createHandler({
+      config: config({ sharedSecrets: [`${DDNS_SECRET} `] }),
     })
   );
 });

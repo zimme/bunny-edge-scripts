@@ -6,6 +6,8 @@ import {
   provisionFromPrivateTerminal,
 } from "../src/provision.ts";
 
+const DDNS_SECRET = "a-strong-ddns-secret-from-a-password-manager";
+
 function assertIncludes(value: string, expected: string): void {
   if (!value.includes(expected)) {
     throw new Error(`Expected ${JSON.stringify(value)} to include ${expected}`);
@@ -40,6 +42,24 @@ Deno.test("dry-run scaffold returns expected Bunny Git files", async () => {
   }
 });
 
+Deno.test("scaffold emits account-wide scope only after explicit opt-in", async () => {
+  const directory = await Deno.makeTempDir();
+  await scaffoldProject({
+    ...defaultOptions(),
+    directory,
+    allowAllHosts: true,
+  });
+
+  assertIncludes(
+    await Deno.readTextFile(`${directory}/.env.example`),
+    "DDNS_ALLOW_ALL_HOSTS=true",
+  );
+  assertIncludes(
+    await Deno.readTextFile(`${directory}/provision.ts`),
+    "allowAllHosts: true",
+  );
+});
+
 Deno.test("scaffold writes a GitHub Action workflow when requested", async () => {
   const directory = await Deno.makeTempDir();
   const result = await scaffoldProject({
@@ -57,6 +77,12 @@ Deno.test("scaffold writes a GitHub Action workflow when requested", async () =>
   assertIncludes(readme, "Ask An AI Agent");
   assertIncludes(readme, "SAFE AI HANDOFF");
   assertIncludes(readme, "stop and wait");
+  assertIncludes(readme, "fails closed");
+  if (readme.includes("checkip-server")) {
+    throw new Error(
+      "Generated inadyn config must not trust an unverified IP header",
+    );
+  }
 
   const agentInstructions = await Deno.readTextFile(`${directory}/AGENTS.md`);
   assertIncludes(agentInstructions, "deno task ci");
@@ -67,10 +93,10 @@ Deno.test("scaffold writes a GitHub Action workflow when requested", async () =>
   assertIncludes(agentInstructions, "must never be run by an AI agent");
 
   const denoJson = await Deno.readTextFile(`${directory}/deno.json`);
-  assertIncludes(denoJson, "jsr:@zimme/bunny-ddns-edge-script@^1.0.0");
+  assertIncludes(denoJson, "jsr:@zimme/bunny-ddns-edge-script@^0.0.0");
   assertIncludes(
     denoJson,
-    "jsr:@zimme/create-bunny-ddns@^1.0.0/provision",
+    "jsr:@zimme/create-bunny-ddns@^0.0.0/provision",
   );
   assertIncludes(denoJson, "npm:@bunny.net/edgescript-sdk@0.12.1");
   assertIncludes(denoJson, "deno run --allow-net=api.bunny.net provision.ts");
@@ -79,6 +105,7 @@ Deno.test("scaffold writes a GitHub Action workflow when requested", async () =>
     `${directory}/provision.ts`,
   );
   assertIncludes(provisionSource, "provisionFromPrivateTerminal");
+  assertIncludes(provisionSource, "allowAllHosts: false");
   if (
     provisionSource.includes("account-key") ||
     provisionSource.includes("client-secret")
@@ -102,7 +129,7 @@ Deno.test("scaffold writes a GitHub Action workflow when requested", async () =>
   }
 
   const envExample = await Deno.readTextFile(`${directory}/.env.example`);
-  assertIncludes(envExample, "DDNS_ALLOW_ALL_HOSTS=true");
+  assertIncludes(envExample, "DDNS_ALLOW_ALL_HOSTS=false");
 });
 
 Deno.test("force mode refuses to overwrite through a symlink", async () => {
@@ -156,6 +183,35 @@ Deno.test("scaffold rejects values that could inject agent instructions", async 
   }
 });
 
+Deno.test("scaffold validates package and DNS scope configuration", async () => {
+  for (
+    const options of [
+      { packageVersion: "latest" },
+      { packageRegistry: "other" },
+      { deployMode: "other" },
+      { allowedHosts: "bad*.example.com" },
+      { allowedZones: "example" },
+      { allowedHosts: "home.example.com", allowAllHosts: true },
+    ]
+  ) {
+    let failed = false;
+    try {
+      await scaffoldProject({
+        ...defaultOptions(),
+        ...options,
+        dryRun: true,
+      } as ReturnType<typeof defaultOptions>);
+    } catch {
+      failed = true;
+    }
+    if (!failed) {
+      throw new Error(
+        `Expected invalid scaffold options to fail: ${JSON.stringify(options)}`,
+      );
+    }
+  }
+});
+
 Deno.test("CLI rejects unknown options", async () => {
   let failed = false;
   try {
@@ -174,7 +230,12 @@ Deno.test("Bunny provisioning creates a script and configures secrets", async ()
   const fetcher = (url: string | URL | Request, init?: RequestInit) => {
     requests.push({ url: String(url), init });
     if (requests.length === 1) {
-      return Promise.resolve(Response.json({ Items: [] }));
+      return Promise.resolve(Response.json({
+        Items: [],
+        CurrentPage: 1,
+        TotalItems: 0,
+        HasMoreItems: false,
+      }));
     }
     if (requests.length === 2) {
       return Promise.resolve(Response.json({
@@ -183,15 +244,18 @@ Deno.test("Bunny provisioning creates a script and configures secrets", async ()
         DefaultHostname: "home-ddns.edge.bunny.net",
       }, { status: 201 }));
     }
-    return Promise.resolve(new Response(null, { status: 204 }));
+    return Promise.resolve(Response.json({
+      Id: requests.length,
+      Name: "configured-value",
+    }));
   };
 
   const result = await provisionBunnyEdgeScript({
     apiKey: "account-key",
-    scriptName: "home-ddns",
-    ddnsSharedSecret: "client-secret",
-    ddnsUsername: "inadyn",
-    allowedHosts: "home.example.com",
+    scriptName: " home-ddns ",
+    ddnsSharedSecret: DDNS_SECRET,
+    ddnsUsername: " inadyn ",
+    allowedHosts: " HOME.EXAMPLE.COM. ",
     allowedZones: "",
   }, fetcher as typeof fetch);
 
@@ -201,35 +265,88 @@ Deno.test("Bunny provisioning creates a script and configures secrets", async ()
   if (requests.length !== 7) {
     throw new Error(`Expected 7 Bunny requests, received ${requests.length}`);
   }
+  const listUrl = new URL(requests[0].url);
+  if (
+    listUrl.pathname !== "/compute/script" ||
+    listUrl.searchParams.get("type") !== "0" ||
+    listUrl.searchParams.get("page") !== "1" ||
+    listUrl.searchParams.get("perPage") !== "1000" ||
+    listUrl.searchParams.get("search") !== "home-ddns" ||
+    requests[0].init?.method !== "GET"
+  ) {
+    throw new Error("Edge Script collision request was not correctly formed");
+  }
+
   const createRequest = JSON.parse(String(requests[1].init?.body));
-  if (createRequest.Code !== null || createRequest.ScriptType !== 0) {
+  if (
+    requests[1].url !== "https://api.bunny.net/compute/script" ||
+    requests[1].init?.method !== "POST" ||
+    createRequest.Name !== "home-ddns" ||
+    createRequest.Code !== null ||
+    createRequest.ScriptType !== 0 ||
+    createRequest.CreateLinkedPullZone !== false
+  ) {
     throw new Error("Edge Script creation request was not safely configured");
   }
   for (const request of requests) {
     if (
       request.url.includes("account-key") ||
-      request.url.includes("client-secret")
+      request.url.includes(DDNS_SECRET)
     ) {
       throw new Error("A secret was included in a Bunny API URL");
     }
     if (new Headers(request.init?.headers).get("AccessKey") !== "account-key") {
       throw new Error("Bunny API request did not use the AccessKey header");
     }
+    if (request.init?.redirect !== "error") {
+      throw new Error("Bunny API request allowed redirects");
+    }
   }
 
-  const secretRequest = JSON.parse(String(requests[2].init?.body));
-  if (
-    secretRequest.Name !== "BUNNY_API_KEY" ||
-    secretRequest.Secret !== "account-key"
-  ) {
-    throw new Error("Bunny API key secret was not configured correctly");
-  }
-  const scopeRequest = JSON.parse(String(requests.at(-1)?.init?.body));
-  if (
-    scopeRequest.Name !== "DDNS_ALLOWED_HOSTS" ||
-    scopeRequest.DefaultValue !== "home.example.com"
-  ) {
-    throw new Error("Allowed-host configuration was not provisioned");
+  const expectedWrites = [
+    {
+      url: "https://api.bunny.net/compute/script/42/variables",
+      body: {
+        Name: "DDNS_USERNAME",
+        Required: false,
+        DefaultValue: "inadyn",
+      },
+    },
+    {
+      url: "https://api.bunny.net/compute/script/42/variables",
+      body: {
+        Name: "DDNS_ALLOW_ALL_HOSTS",
+        Required: false,
+        DefaultValue: "false",
+      },
+    },
+    {
+      url: "https://api.bunny.net/compute/script/42/variables",
+      body: {
+        Name: "DDNS_ALLOWED_HOSTS",
+        Required: false,
+        DefaultValue: "home.example.com",
+      },
+    },
+    {
+      url: "https://api.bunny.net/compute/script/42/secrets",
+      body: { Name: "DDNS_SHARED_SECRET", Secret: DDNS_SECRET },
+    },
+    {
+      url: "https://api.bunny.net/compute/script/42/secrets",
+      body: { Name: "BUNNY_API_KEY", Secret: "account-key" },
+    },
+  ];
+  for (const [index, expected] of expectedWrites.entries()) {
+    const request = requests[index + 2];
+    if (
+      request.url !== expected.url ||
+      request.init?.method !== "PUT" ||
+      JSON.stringify(JSON.parse(String(request.init?.body))) !==
+        JSON.stringify(expected.body)
+    ) {
+      throw new Error(`Unexpected Bunny upsert request at index ${index}`);
+    }
   }
 });
 
@@ -239,6 +356,9 @@ Deno.test("Bunny provisioning refuses to overwrite an existing script", async ()
     requests += 1;
     return Promise.resolve(Response.json({
       Items: [{ Id: 7, Name: "home-ddns", Deleted: false }],
+      CurrentPage: 1,
+      TotalItems: 1,
+      HasMoreItems: false,
     }));
   };
 
@@ -247,9 +367,9 @@ Deno.test("Bunny provisioning refuses to overwrite an existing script", async ()
     await provisionBunnyEdgeScript({
       apiKey: "account-key",
       scriptName: "home-ddns",
-      ddnsSharedSecret: "client-secret",
+      ddnsSharedSecret: DDNS_SECRET,
       ddnsUsername: "inadyn",
-      allowedHosts: "",
+      allowedHosts: "home.example.com",
       allowedZones: "",
     }, fetcher as typeof fetch);
   } catch (error) {
@@ -259,6 +379,295 @@ Deno.test("Bunny provisioning refuses to overwrite an existing script", async ()
 
   if (!failed || requests !== 1) {
     throw new Error("Existing script collision was not handled safely");
+  }
+});
+
+Deno.test("Bunny provisioning checks every collision page", async () => {
+  const requestedPages: string[] = [];
+  const fetcher = (url: string | URL | Request) => {
+    const page = new URL(String(url)).searchParams.get("page") ?? "";
+    requestedPages.push(page);
+    return Promise.resolve(Response.json(
+      page === "1"
+        ? {
+          Items: [{ Id: 6, Name: "another-script", Deleted: false }],
+          CurrentPage: 1,
+          TotalItems: 2,
+          HasMoreItems: true,
+        }
+        : {
+          Items: [{ Id: 7, Name: "HOME-DDNS", Deleted: false }],
+          CurrentPage: 2,
+          TotalItems: 2,
+          HasMoreItems: false,
+        },
+    ));
+  };
+
+  let message = "";
+  try {
+    await provisionBunnyEdgeScript({
+      apiKey: "account-key",
+      scriptName: "home-ddns",
+      ddnsSharedSecret: DDNS_SECRET,
+      ddnsUsername: "inadyn",
+      allowedHosts: "home.example.com",
+      allowedZones: "",
+    }, fetcher as typeof fetch);
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+
+  if (
+    !message.includes("will not overwrite") || requestedPages.join() !== "1,2"
+  ) {
+    throw new Error("Paginated Edge Script collision was not detected");
+  }
+});
+
+Deno.test("Bunny provisioning requires explicit account-wide authority", async () => {
+  for (
+    const options of [
+      { allowedHosts: "", allowedZones: "" },
+      {
+        allowedHosts: "home.example.com",
+        allowedZones: "",
+        allowAllHosts: true,
+      },
+    ]
+  ) {
+    let requestAttempted = false;
+    let message = "";
+    try {
+      await provisionBunnyEdgeScript(
+        {
+          apiKey: "account-key",
+          scriptName: "home-ddns",
+          ddnsSharedSecret: DDNS_SECRET,
+          ddnsUsername: "inadyn",
+          ...options,
+        },
+        (() => {
+          requestAttempted = true;
+          return Promise.resolve(new Response());
+        }) as typeof fetch,
+      );
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    if (!message.includes("allowAllHosts") || requestAttempted) {
+      throw new Error("Account-wide authority did not fail closed");
+    }
+  }
+});
+
+Deno.test("Bunny provisioning accepts explicit account-wide authority", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const fetcher = (url: string | URL | Request, init?: RequestInit) => {
+    requests.push({ url: String(url), init });
+    if (requests.length === 1) {
+      return Promise.resolve(Response.json({
+        Items: [],
+        CurrentPage: 1,
+        TotalItems: 0,
+        HasMoreItems: false,
+      }));
+    }
+    if (requests.length === 2) {
+      return Promise.resolve(Response.json({
+        Id: 42,
+        Name: "home-ddns",
+      }, { status: 201 }));
+    }
+    return Promise.resolve(Response.json({
+      Id: requests.length,
+      Name: "configured-value",
+    }));
+  };
+
+  await provisionBunnyEdgeScript({
+    apiKey: "account-key",
+    scriptName: "home-ddns",
+    ddnsSharedSecret: DDNS_SECRET,
+    ddnsUsername: "inadyn",
+    allowedHosts: "",
+    allowedZones: "",
+    allowAllHosts: true,
+  }, fetcher as typeof fetch);
+
+  if (requests.length !== 6) {
+    throw new Error("Unexpected request count for account-wide provisioning");
+  }
+  const authority = JSON.parse(String(requests[3].init?.body));
+  if (
+    authority.Name !== "DDNS_ALLOW_ALL_HOSTS" ||
+    authority.DefaultValue !== "true"
+  ) {
+    throw new Error("Explicit account-wide authority was not provisioned");
+  }
+});
+
+Deno.test("Bunny provisioning validates inputs before API access", async () => {
+  const invalidOptions = [
+    { apiKey: "a".repeat(4097) },
+    { scriptName: "   " },
+    { ddnsSharedSecret: "too-short" },
+    { ddnsSharedSecret: `${"a".repeat(31)}\n` },
+    { ddnsUsername: "" },
+    { ddnsUsername: "bad:user" },
+    { allowedHosts: "not-a-hostname" },
+    { allowedHosts: "home.example.com," },
+    { allowedHosts: "home.example.com\n" },
+    { allowedZones: "example.com,*bad.example.com" },
+    { allowedHosts: `${"a".repeat(64)}.example.com` },
+    { allowedHosts: Array(400).fill("home.example.com").join(",") },
+    { allowAllHosts: "true" as unknown as boolean },
+  ];
+
+  for (const invalid of invalidOptions) {
+    let requestAttempted = false;
+    let failed = false;
+    try {
+      await provisionBunnyEdgeScript(
+        {
+          apiKey: "account-key",
+          scriptName: "home-ddns",
+          ddnsSharedSecret: DDNS_SECRET,
+          ddnsUsername: "inadyn",
+          allowedHosts: "home.example.com",
+          allowedZones: "",
+          ...invalid,
+        },
+        (() => {
+          requestAttempted = true;
+          return Promise.resolve(new Response());
+        }) as typeof fetch,
+      );
+    } catch {
+      failed = true;
+    }
+    if (!failed || requestAttempted) {
+      throw new Error(
+        `Invalid provisioning input reached Bunny: ${JSON.stringify(invalid)}`,
+      );
+    }
+  }
+});
+
+Deno.test("Bunny provisioning deletes a partially configured script", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const fetcher = (url: string | URL | Request, init?: RequestInit) => {
+    requests.push({ url: String(url), init });
+    if (requests.length === 1) {
+      return Promise.resolve(Response.json({
+        Items: [],
+        CurrentPage: 1,
+        TotalItems: 0,
+        HasMoreItems: false,
+      }));
+    }
+    if (requests.length === 2) {
+      return Promise.resolve(Response.json({
+        Id: 42,
+        Name: "home-ddns",
+      }, { status: 201 }));
+    }
+    if (init?.method === "DELETE") {
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
+    const body = JSON.parse(String(init?.body));
+    if (body.Name === "BUNNY_API_KEY") {
+      return Promise.resolve(
+        new Response(
+          `{"Message":"account-key ${DDNS_SECRET}"}`,
+          { status: 500 },
+        ),
+      );
+    }
+    return Promise.resolve(Response.json({
+      Id: requests.length,
+      Name: body.Name,
+    }));
+  };
+
+  let message = "";
+  try {
+    await provisionBunnyEdgeScript({
+      apiKey: "account-key",
+      scriptName: "home-ddns",
+      ddnsSharedSecret: DDNS_SECRET,
+      ddnsUsername: "inadyn",
+      allowedHosts: "home.example.com",
+      allowedZones: "",
+    }, fetcher as typeof fetch);
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+
+  const cleanup = requests.at(-1);
+  if (
+    !message.includes("newly created script was deleted") ||
+    message.includes("account-key") ||
+    message.includes(DDNS_SECRET) ||
+    cleanup?.url !== "https://api.bunny.net/compute/script/42" ||
+    cleanup.init?.method !== "DELETE" ||
+    cleanup.init?.body !== undefined
+  ) {
+    throw new Error("Partial Bunny setup was not cleaned up safely");
+  }
+});
+
+Deno.test("Bunny provisioning reports failed cleanup without secrets", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const fetcher = (url: string | URL | Request, init?: RequestInit) => {
+    requests.push({ url: String(url), init });
+    if (requests.length === 1) {
+      return Promise.resolve(Response.json({
+        Items: [],
+        CurrentPage: 1,
+        TotalItems: 0,
+        HasMoreItems: false,
+      }));
+    }
+    if (requests.length === 2) {
+      return Promise.resolve(Response.json({
+        Id: 42,
+        Name: "home-ddns",
+      }, { status: 201 }));
+    }
+    if (init?.method === "DELETE") {
+      return Promise.resolve(
+        new Response(
+          `{"Message":"account-key ${DDNS_SECRET}"}`,
+          { status: 503 },
+        ),
+      );
+    }
+    return Promise.resolve(new Response(null, { status: 500 }));
+  };
+
+  let message = "";
+  try {
+    await provisionBunnyEdgeScript({
+      apiKey: "account-key",
+      scriptName: "home-ddns",
+      ddnsSharedSecret: DDNS_SECRET,
+      ddnsUsername: "inadyn",
+      allowedHosts: "home.example.com",
+      allowedZones: "",
+    }, fetcher as typeof fetch);
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+
+  if (
+    !message.includes("configuration and cleanup both failed") ||
+    !message.includes("Review and delete it") ||
+    !message.includes("HTTP 503") ||
+    message.includes("account-key") ||
+    message.includes(DDNS_SECRET)
+  ) {
+    throw new Error("Cleanup failure did not produce a secret-safe recovery");
   }
 });
 
@@ -471,7 +880,7 @@ Deno.test("provisioning rejects mismatched DDNS secret confirmation", async () =
 Deno.test("Bunny API errors do not echo response bodies or secrets", async () => {
   const fetcher = () =>
     Promise.resolve(
-      new Response('{"Message":"account-key client-secret"}', {
+      new Response(`{"Message":"account-key ${DDNS_SECRET}"}`, {
         status: 401,
         statusText: "Unauthorized",
       }),
@@ -482,9 +891,9 @@ Deno.test("Bunny API errors do not echo response bodies or secrets", async () =>
     await provisionBunnyEdgeScript({
       apiKey: "account-key",
       scriptName: "home-ddns",
-      ddnsSharedSecret: "client-secret",
+      ddnsSharedSecret: DDNS_SECRET,
       ddnsUsername: "inadyn",
-      allowedHosts: "",
+      allowedHosts: "home.example.com",
       allowedZones: "",
     }, fetcher as typeof fetch);
   } catch (error) {
@@ -494,7 +903,7 @@ Deno.test("Bunny API errors do not echo response bodies or secrets", async () =>
   if (
     !message.includes("HTTP 401") ||
     message.includes("account-key") ||
-    message.includes("client-secret")
+    message.includes(DDNS_SECRET)
   ) {
     throw new Error("Bunny API error handling exposed secret material");
   }
@@ -521,7 +930,8 @@ Deno.test("scaffold CLI prints credential-safe Bunny handoff", async () => {
       "Deploy and edit with GitHub",
       "BUNNY_API_KEY=<your Bunny account API key>",
       "DDNS_SHARED_SECRET=<a strong, unique secret for inadyn>",
-      "DDNS_ALLOW_ALL_HOSTS=true",
+      "DDNS_ALLOW_ALL_HOSTS=false",
+      "generated configuration intentionally fails closed",
       "deno task provision",
       "not controlled or recorded by AI",
       "SAFE AI HANDOFF",

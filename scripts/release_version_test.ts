@@ -1,6 +1,10 @@
 import {
+  assertManifestVersions,
   assertReleaseVersion,
   compareReleaseVersions,
+  exampleImportMapPath,
+  generatorVersionSource,
+  versionManifestPaths,
 } from "./release_version.ts";
 import { isReleaseWorkflowTag, parseRefUpdates } from "./pre_push.ts";
 
@@ -93,4 +97,92 @@ Deno.test("orders stable and prerelease versions using SemVer precedence", () =>
   if (compareReleaseVersions("1.0.0", "1.0.0") !== 0) {
     throw new Error("Expected identical versions to compare equally.");
   }
+});
+
+Deno.test("release manifests include the generator's scaffold version", async () => {
+  const files = new Map<string, string>(
+    versionManifestPaths.map((path) => [
+      path,
+      JSON.stringify({ version: "1.2.3" }),
+    ]),
+  );
+  files.set(
+    generatorVersionSource,
+    'const DEFAULT_PACKAGE_VERSION = "^1.2.3";',
+  );
+  files.set(
+    exampleImportMapPath,
+    JSON.stringify({
+      imports: {
+        "@zimme/bunny-ddns-edge-script":
+          "jsr:@zimme/bunny-ddns-edge-script@^1.2.3",
+      },
+    }),
+  );
+
+  await assertManifestVersions("1.2.3", (path) => {
+    const value = files.get(path);
+    if (value === undefined) {
+      return Promise.reject(new Error(`Unexpected path: ${path}`));
+    }
+    return Promise.resolve(value);
+  });
+
+  files.set(
+    generatorVersionSource,
+    'const DEFAULT_PACKAGE_VERSION = "^1.0.0";',
+  );
+  try {
+    await assertManifestVersions(
+      "1.2.3",
+      (path) => Promise.resolve(files.get(path) ?? ""),
+    );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes("default package version")
+    ) {
+      return;
+    }
+    throw error;
+  }
+  throw new Error("Expected a stale scaffold package version to be rejected.");
+});
+
+Deno.test("release manifests reject a stale checked example import", async () => {
+  const files = new Map<string, string>(
+    versionManifestPaths.map((path) => [
+      path,
+      JSON.stringify({ version: "1.2.3" }),
+    ]),
+  );
+  files.set(
+    generatorVersionSource,
+    'const DEFAULT_PACKAGE_VERSION = "^1.2.3";',
+  );
+  files.set(
+    exampleImportMapPath,
+    JSON.stringify({
+      imports: {
+        "@zimme/bunny-ddns-edge-script":
+          "jsr:@zimme/bunny-ddns-edge-script@^1.0.0",
+      },
+    }),
+  );
+
+  try {
+    await assertManifestVersions(
+      "1.2.3",
+      (path) => Promise.resolve(files.get(path) ?? ""),
+    );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes("runtime import")
+    ) {
+      return;
+    }
+    throw error;
+  }
+  throw new Error("Expected a stale example runtime import to be rejected.");
 });

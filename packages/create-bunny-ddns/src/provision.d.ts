@@ -3,6 +3,7 @@ export interface PrivateTerminalProvisionOptions {
   ddnsUsername: string;
   allowedHosts: string;
   allowedZones: string;
+  allowAllHosts?: boolean;
 }
 
 export interface PrivateTerminalProvisionResult {

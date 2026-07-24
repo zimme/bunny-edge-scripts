@@ -61,7 +61,11 @@ function nextSteps(
         ? `\n     DDNS_ALLOWED_ZONES=${options.allowedZones}`
         : ""
     }\n     DDNS_ALLOW_ALL_HOSTS=false`
-    : "\n     DDNS_ALLOW_ALL_HOSTS=true";
+    : `\n     DDNS_ALLOW_ALL_HOSTS=${options.allowAllHosts}`;
+  const scopeWarning =
+    !options.allowedHosts && !options.allowedZones && !options.allowAllHosts
+      ? "\n  9. Before deployment, set DDNS_ALLOWED_HOSTS or DDNS_ALLOWED_ZONES. The generated configuration intentionally fails closed.\n"
+      : "";
 
   return `\nNo credentials were requested or accessed.
 
@@ -77,6 +81,7 @@ Safest setup (recommended):
      DDNS_SHARED_SECRET=<a strong, unique secret for inadyn>
   8. Add these Environment Variables:
      DDNS_USERNAME=${options.ddnsUsername}${scopeVariables}
+${scopeWarning}
 
 Optional private-terminal provisioning:
   1. End every AI agent session that can observe the terminal.
@@ -118,6 +123,11 @@ function optionsFromArgs(args: string[]): ScaffoldOptions {
 
     if (arg === "--no-install") {
       options.installDependencies = false;
+      continue;
+    }
+
+    if (arg === "--allow-all-hosts") {
+      options.allowAllHosts = true;
       continue;
     }
 
@@ -216,6 +226,12 @@ function optionsFromArgs(args: string[]): ScaffoldOptions {
     "Optional DDNS_ALLOWED_ZONES",
     options.allowedZones,
   );
+  if (!options.allowedHosts && !options.allowedZones) {
+    options.allowAllHosts = promptConfirmation(
+      "Grant this DDNS credential account-wide hostname access",
+      false,
+    );
+  }
 
   return options;
 }
@@ -235,6 +251,7 @@ Options:
   --username <name>        Required DDNS Basic Auth username
   --allowed-hosts <list>   Initial DDNS_ALLOWED_HOSTS value
   --allowed-zones <list>   Initial DDNS_ALLOWED_ZONES value
+  --allow-all-hosts        Explicitly grant account-wide hostname access
   --no-install             Skip dependency resolution and lockfile creation
   --force                  Write into a non-empty directory
   --dry-run                List files without writing them
@@ -264,6 +281,21 @@ function promptChoice<T extends string>(
   }
 
   return answer as T;
+}
+
+function promptConfirmation(label: string, defaultValue: boolean): boolean {
+  const defaultLabel = defaultValue ? "Y/n" : "y/N";
+  const answer = prompt(`${label}? [${defaultLabel}]`)?.trim().toLowerCase();
+  if (!answer) {
+    return defaultValue;
+  }
+  if (answer === "y" || answer === "yes") {
+    return true;
+  }
+  if (answer === "n" || answer === "no") {
+    return false;
+  }
+  throw new Error(`Invalid confirmation: ${answer}`);
 }
 
 function parseDeployMode(value: string): DeployMode {

@@ -3,3 +3,4 @@ node_modules/
 .bunny/
 .env
 .env.*
+!.env.example

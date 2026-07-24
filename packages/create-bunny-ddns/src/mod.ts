@@ -21,6 +21,8 @@ export interface ScaffoldOptions {
   allowedHosts: string;
   /** Comma-separated DNS-zone allow-list. */
   allowedZones: string;
+  /** Explicitly grants the DDNS credential account-wide hostname access. */
+  allowAllHosts: boolean;
   /** Allows writing into an existing non-empty directory. */
   force: boolean;
   /** Computes the file list without writing it. */
@@ -37,7 +39,7 @@ export interface ScaffoldResult {
   files: string[];
 }
 
-const DEFAULT_PACKAGE_VERSION = "^1.0.0";
+const DEFAULT_PACKAGE_VERSION = "^0.0.0";
 
 /** Returns secure, Deno-first defaults for a personal Bunny DDNS repository. */
 export function defaultOptions(): ScaffoldOptions {
@@ -50,6 +52,7 @@ export function defaultOptions(): ScaffoldOptions {
     ddnsUsername: "inadyn",
     allowedHosts: "",
     allowedZones: "",
+    allowAllHosts: false,
     force: false,
     dryRun: false,
     installDependencies: true,
@@ -159,6 +162,7 @@ await provisionFromPrivateTerminal({
   ddnsUsername: ${JSON.stringify(options.ddnsUsername)},
   allowedHosts: ${JSON.stringify(options.allowedHosts)},
   allowedZones: ${JSON.stringify(options.allowedZones)},
+  allowAllHosts: ${options.allowAllHosts},
 });
 `;
 }
@@ -183,15 +187,14 @@ BunnySDK.net.http.serve(createBunnyDdnsHandler({ config }));
 function envExample(options: ScaffoldOptions): string {
   return `# Set these as Bunny Edge Script secrets, not committed values.
 BUNNY_API_KEY=
+# Use 32-256 printable ASCII characters without whitespace or commas.
 DDNS_SHARED_SECRET=
 
 # Optional but recommended.
 DDNS_USERNAME=${options.ddnsUsername}
 DDNS_ALLOWED_HOSTS=${options.allowedHosts}
 DDNS_ALLOWED_ZONES=${options.allowedZones}
-DDNS_ALLOW_ALL_HOSTS=${
-    options.allowedHosts || options.allowedZones ? "false" : "true"
-  }
+DDNS_ALLOW_ALL_HOSTS=${options.allowAllHosts}
 
 # Defaults shown here are built in.
 DDNS_AUTO_CREATE=true
@@ -261,11 +264,14 @@ Add these as Environment Variables:
 - \`DDNS_USERNAME\`
 - Optional: \`DDNS_ALLOWED_HOSTS\`
 - Optional: \`DDNS_ALLOWED_ZONES\`
+- \`DDNS_ALLOW_ALL_HOSTS\` (keep \`false\` unless account-wide authority was
+  explicitly selected)
 
 Do not commit real secrets to this repo.
 Commit the generated \`deno.lock\` file so deployments remain reproducible.
-\`DDNS_ALLOW_ALL_HOSTS=true\` is generated only when no allow-list was supplied;
-replace it with \`DDNS_ALLOWED_HOSTS\` or \`DDNS_ALLOWED_ZONES\` for least privilege.
+The generated configuration fails closed when no allow-list was supplied.
+Add \`DDNS_ALLOWED_HOSTS\` or \`DDNS_ALLOWED_ZONES\`, or regenerate with
+\`--allow-all-hosts\` only when account-wide authority is intentional.
 
 ## Credential-Safe Provisioning
 
@@ -292,16 +298,18 @@ ${deploySection}
 
 ## Inadyn
 
+Replace \`edge-script.example.net\` with the deployed Edge Script hostname and
+\`home.example.com\` with the DNS record you authorized. Inadyn supplies
+\`%i\` from its normal public-address detection; do not point its check-IP
+configuration at the Edge Script unless you have independently verified that
+your Bunny deployment exposes a trusted client-address header.
+
 \`\`\`conf
 custom bunny-ddns-edge-script {
     username       = "${options.ddnsUsername}"
     password       = "your-ddns-shared-secret"
 
-    checkip-server = "ddns.example.com"
-    checkip-path   = "/checkip"
-    checkip-ssl    = true
-
-    ddns-server    = "ddns.example.com"
+    ddns-server    = "edge-script.example.net"
     ddns-path      = "/nic/update?hostname=%h&myip=%i"
     ssl            = true
 
@@ -383,6 +391,12 @@ zone scope, and remaining dashboard actions. Never include secret values.
 
 function validateScaffoldOptions(options: ScaffoldOptions): void {
   if (
+    !options.directory || options.directory.includes("\0") ||
+    options.directory.trim() !== options.directory
+  ) {
+    throw new Error("Target directory must be a non-empty, trimmed path.");
+  }
+  if (
     !/^[A-Za-z0-9._-]{1,100}$/.test(options.projectName) ||
     options.projectName === "." || options.projectName === ".."
   ) {
@@ -395,18 +409,64 @@ function validateScaffoldOptions(options: ScaffoldOptions): void {
       "DDNS username must use 1 to 128 safe Basic Auth username characters.",
     );
   }
+  if (
+    options.packageRegistry !== "jsr" && options.packageRegistry !== "npm"
+  ) {
+    throw new Error("Package registry must be jsr or npm.");
+  }
+  if (
+    options.deployMode !== "bunny-git" &&
+    options.deployMode !== "github-action"
+  ) {
+    throw new Error("Deploy mode must be bunny-git or github-action.");
+  }
+  if (
+    !/^[~^]?(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
+      .test(options.packageVersion)
+  ) {
+    throw new Error("Package version must be a complete SemVer or range.");
+  }
   for (
     const [name, value] of [
       ["DDNS_ALLOWED_HOSTS", options.allowedHosts],
       ["DDNS_ALLOWED_ZONES", options.allowedZones],
     ]
   ) {
-    if (!/^[A-Za-z0-9.*,-]*$/.test(value)) {
+    if (!isValidPatternList(value)) {
       throw new Error(
         `${name} must be a comma-separated list of DNS names or wildcard patterns.`,
       );
     }
   }
+  if (
+    options.allowAllHosts &&
+    (options.allowedHosts.length > 0 || options.allowedZones.length > 0)
+  ) {
+    throw new Error(
+      "Account-wide access cannot be combined with hostname or zone allow-lists.",
+    );
+  }
+}
+
+function isValidPatternList(value: string): boolean {
+  if (value.length > 4096 || /[\r\n]/.test(value)) {
+    return false;
+  }
+  if (value === "") {
+    return true;
+  }
+  return value.split(",").every((rawPattern) => {
+    const pattern = rawPattern.trim().replace(/\.$/, "").toLowerCase();
+    const hostname = pattern.startsWith("*.") ? pattern.slice(2) : pattern;
+    if (!hostname.includes(".")) {
+      return false;
+    }
+    return hostname.length <= 253 &&
+      hostname.split(".").every((label) =>
+        label.length >= 1 && label.length <= 63 &&
+        /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)
+      );
+  });
 }
 
 function bunnyGitInstructions(): string {
@@ -447,7 +507,8 @@ Script Env Configuration.
 1. In bunny.net, create a Standalone Edge Script.
 2. Add runtime secrets in Bunny Edge Script Env Configuration.
 3. Create a Bunny Edge Script deploy key.
-4. Add these GitHub repository secrets:
+4. Create a protected GitHub \`production\` environment and add these
+   environment secrets:
    - \`SCRIPT_ID\`
    - \`DEPLOY_KEY\`
 5. Push to \`main\`.
