@@ -2,7 +2,7 @@ import {
   assertReleaseVersion,
   compareReleaseVersions,
 } from "./release_version.ts";
-import { isReleaseWorkflowTag } from "./pre_push.ts";
+import { isReleaseWorkflowTag, parseRefUpdates } from "./pre_push.ts";
 
 function assertAccepted(version: string): void {
   assertReleaseVersion(version);
@@ -49,6 +49,29 @@ Deno.test("identifies tags that can trigger the release workflow", () => {
       throw new Error(`Expected ${tag} not to be treated as a release tag.`);
     }
   }
+});
+
+Deno.test("parses pre-push ref updates", () => {
+  const updates = parseRefUpdates(
+    "refs/heads/main local refs/heads/main remote\n" +
+      "refs/tags/1.0.0 tag refs/tags/1.0.0 zero\n",
+  );
+  if (
+    updates.length !== 2 ||
+    updates[0][0] !== "refs/heads/main" ||
+    updates[1][1] !== "tag"
+  ) {
+    throw new Error("Expected pre-push ref updates to retain all fields.");
+  }
+});
+
+Deno.test("rejects malformed pre-push ref updates", () => {
+  try {
+    parseRefUpdates("refs/heads/main missing-fields");
+  } catch {
+    return;
+  }
+  throw new Error("Expected malformed pre-push input to be rejected.");
 });
 
 Deno.test("orders stable and prerelease versions using SemVer precedence", () => {

@@ -66,7 +66,10 @@ communicate impact:
 
 Use an optional scope when it clarifies ownership, for example
 `fix(ddns): reject ambiguous record sets`. Run `deno task commits:check`
-locally. Maintainers prepare all manifest versions and validation together with
+locally. `deno task setup` configures tracked `commit-msg` and `pre-push` hooks:
+the first rejects an invalid new message, while the second rechecks every
+outgoing branch range so commits created by automation cannot bypass the policy
+silently. Maintainers prepare all manifest versions and validation together with
 `deno task release:prepare <version>` in a dedicated release commit. Do not add
 a committed `CHANGELOG.md`; the tag workflow generates release notes and
 attaches the complete changelog to the GitHub release.

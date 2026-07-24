@@ -3,17 +3,68 @@ import {
   assertReleaseVersion,
 } from "./release_version.ts";
 
+type RefUpdate = [
+  localRef: string,
+  localOid: string,
+  remoteRef: string,
+  remoteOid: string,
+];
+
 export function isReleaseWorkflowTag(tag: string): boolean {
   return !tag.includes("/") && tag.split(".").length >= 3;
 }
 
 if (import.meta.main) {
-  await verifyPushedReleaseTags(Deno.args[0] ?? "origin");
+  const updates = parseRefUpdates(
+    await new Response(Deno.stdin.readable).text(),
+  );
+  const remoteName = Deno.args[0] ?? "origin";
+  await verifyPushedCommitMessages(updates, remoteName);
+  await verifyPushedReleaseTags(updates, remoteName);
 }
 
-async function verifyPushedReleaseTags(remoteName: string): Promise<void> {
-  const updates = (await new Response(Deno.stdin.readable).text()).trim()
-    .split("\n").filter(Boolean).map((line) => line.split(" "));
+export function parseRefUpdates(input: string): RefUpdate[] {
+  return input.trim().split("\n").filter(Boolean).map((line) => {
+    const fields = line.split(" ");
+    if (fields.length !== 4) {
+      throw new Error(`Malformed pre-push ref update: ${line}`);
+    }
+    return fields as RefUpdate;
+  });
+}
+
+async function verifyPushedCommitMessages(
+  updates: RefUpdate[],
+  remoteName: string,
+): Promise<void> {
+  for (const [localRef, localOid, , remoteOid] of updates) {
+    if (!localRef.startsWith("refs/heads/") || isZeroOid(localOid)) {
+      continue;
+    }
+    const from = isZeroOid(remoteOid)
+      ? await gitOutput([
+        "merge-base",
+        localOid,
+        `refs/remotes/${remoteName}/main`,
+      ])
+      : remoteOid;
+    await runDeno([
+      "run",
+      "-A",
+      "npm:@commitlint/cli@21.2.1",
+      "--from",
+      from,
+      "--to",
+      localOid,
+      "--verbose",
+    ]);
+  }
+}
+
+async function verifyPushedReleaseTags(
+  updates: RefUpdate[],
+  remoteName: string,
+): Promise<void> {
   const releaseUpdates = updates.filter(([localRef, localOid]) => {
     const tag = localRef.startsWith("refs/tags/")
       ? localRef.slice("refs/tags/".length)
@@ -92,5 +143,16 @@ async function runGit(args: string[]): Promise<void> {
   }).spawn().status;
   if (!status.success) {
     throw new Error(`git ${args.join(" ")} failed.`);
+  }
+}
+
+async function runDeno(args: string[]): Promise<void> {
+  const status = await new Deno.Command(Deno.execPath(), {
+    args,
+    stderr: "inherit",
+    stdout: "inherit",
+  }).spawn().status;
+  if (!status.success) {
+    throw new Error(`deno ${args.join(" ")} failed.`);
   }
 }

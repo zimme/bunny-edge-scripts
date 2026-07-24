@@ -1,0 +1,2 @@
+#!/bin/sh
+exec deno run --quiet -A npm:@commitlint/cli@21.2.1 --edit "$1"

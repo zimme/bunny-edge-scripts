@@ -66,6 +66,8 @@ commands; use `CI=true` when behavior genuinely needs to differ in CI.
 - Use Conventional Commit messages. Prefer `feat`, `fix`, `docs`, `test`,
   `refactor`, `perf`, `build`, `ci`, and `chore`; mark incompatible public API
   changes with `!` and a `BREAKING CHANGE:` footer.
+- Never bypass the tracked `commit-msg` or `pre-push` hooks. The pre-push hook
+  revalidates outgoing commit messages created by agents and other automation.
 - Do not create or edit `CHANGELOG.md` by hand. The tag-only release workflow
   generates it from Conventional Commits as a GitHub release artifact.
 - Keep release tags increasing SemVer, annotated, signed, and GitHub-verified.

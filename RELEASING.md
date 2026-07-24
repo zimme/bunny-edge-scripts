@@ -56,11 +56,11 @@ job receives contents write access but no OIDC.
 Git has no native pre-tag hook. `deno task release:tag` is the repository's safe
 tag-creation interface: it checks the clean worktree, branch, remote commit,
 manifest versions, and existing tags before invoking `git tag -s`. Running
-`deno task setup` installs the tracked `.githooks/pre-push` guard. The guard
-does not mutate commits; it rejects release tags that are malformed, unsigned,
-version-mismatched, or not reachable from the pushed `main` branch. The release
-workflow repeats the version and `origin/main` checks because local hooks can be
-bypassed.
+`deno task setup` installs tracked `commit-msg` and `pre-push` hooks. They
+reject invalid Conventional Commit messages, including outgoing commits created
+by automation, before the pre-push guard checks release tags for valid shape,
+signatures, matching versions, and reachability from pushed `main`. The release
+workflow repeats these checks because local hooks can be bypassed.
 
 The workflow publishes packages only after full validation succeeds. It then
 creates the GitHub release from Conventional Commits, using the latest section
