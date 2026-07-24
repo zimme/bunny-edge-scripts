@@ -1,14 +1,12 @@
 {
   "workspace": [
     "packages/bunny-ddns-edge-script",
-    "packages/bunny-tunnel-edge-script",
     "packages/create-bunny-ddns"
   ],
   "imports": {
     "@commitlint/cli": "npm:@commitlint/cli@21.2.1",
     "@commitlint/config-conventional": "npm:@commitlint/config-conventional@21.2.0",
     "@zimme/bunny-ddns-edge-script": "./packages/bunny-ddns-edge-script/src/mod.ts",
-    "@zimme/bunny-tunnel-edge-script": "./packages/bunny-tunnel-edge-script/src/mod.ts",
     "conventional-changelog": "npm:conventional-changelog@8.1.0",
     "conventional-changelog-conventionalcommits": "npm:conventional-changelog-conventionalcommits@10.2.1",
     "cspell": "npm:cspell@8.19.4",
@@ -17,22 +15,22 @@
   },
   "tasks": {
     "agents:check": "deno run --allow-env=LOG_STREAM,LOG_TOKENS --allow-read=AGENTS.md,CLAUDE.md,GEMINI.md,.agents,.claude,.gemini,.github/copilot-instructions.md scripts/verify_agent_config.ts",
-    "build": "deno task --filter @zimme/bunny-ddns-edge-script build && deno task --filter @zimme/bunny-tunnel-edge-script build && deno task --filter @zimme/create-bunny-ddns build && deno task build:example",
-    "build:example": "deno bundle --external @bunny.net/edgescript-sdk examples/edge-script-repo/script.ts -o examples/edge-script-repo/generated/script.ts && deno bundle --external @bunny.net/edgescript-sdk examples/tunnel-edge-script-repo/script.ts -o examples/tunnel-edge-script-repo/generated/script.ts && deno fmt --config deno.json examples/edge-script-repo/generated/script.ts examples/tunnel-edge-script-repo/generated/script.ts",
-    "check": "deno task --filter @zimme/bunny-ddns-edge-script check && deno task --filter @zimme/bunny-tunnel-edge-script check && deno task --filter @zimme/create-bunny-ddns check && deno check scripts/*.ts && deno check examples/edge-script-repo/script.ts && deno check examples/tunnel-edge-script-repo/script.ts",
+    "build": "deno task --filter @zimme/bunny-ddns-edge-script build && deno task --filter @zimme/create-bunny-ddns build && deno task build:example",
+    "build:example": "deno bundle --external @bunny.net/edgescript-sdk examples/edge-script-repo/script.ts -o examples/edge-script-repo/generated/script.ts && deno fmt --config deno.json examples/edge-script-repo/generated/script.ts",
+    "check": "deno task --filter @zimme/bunny-ddns-edge-script check && deno task --filter @zimme/create-bunny-ddns check && deno check scripts/*.ts && deno check examples/edge-script-repo/script.ts",
     "commits:check": "deno run -A npm:@commitlint/cli@21.2.1 --from \"$(git rev-list --max-parents=0 HEAD)\" --to HEAD --verbose",
     "devcontainer:down": "docker compose -f .devcontainer/compose.yaml down",
     "devcontainer:exec": "deno run -A --no-config --no-lock npm:@devcontainers/cli@0.87.0 exec --workspace-folder .",
     "devcontainer:up": "deno run -A --no-config --no-lock npm:@devcontainers/cli@0.87.0 up --workspace-folder . --frozen-lockfile",
     "doctor": "deno run --allow-read=.tool-versions --allow-run=node,npm,gh,copilot scripts/verify_toolchain.ts",
-    "docs:check": "deno doc --lint packages/bunny-ddns-edge-script/src/mod.ts packages/bunny-tunnel-edge-script/src/mod.ts packages/create-bunny-ddns/src/mod.ts packages/create-bunny-ddns/src/provision.ts",
+    "docs:check": "deno doc --lint packages/bunny-ddns-edge-script/src/mod.ts packages/create-bunny-ddns/src/mod.ts packages/create-bunny-ddns/src/provision.ts",
     "audit": "deno audit",
     "ci": "deno task agents:check && deno fmt --check && deno task spellcheck && deno lint && deno task check && deno task docs:check && deno task test && deno task build && deno task smoke && deno task audit && deno task publish:dry-run",
     "fmt": "deno fmt",
     "fmt:check": "deno fmt --check",
     "lint": "deno lint",
     "hooks:install": "deno run --allow-run=git scripts/install_git_hooks.ts",
-    "publish:dry-run": "deno publish --config packages/bunny-ddns-edge-script/deno.json --dry-run --allow-dirty && deno publish --config packages/bunny-tunnel-edge-script/deno.json --dry-run --allow-dirty && deno publish --config packages/create-bunny-ddns/deno.json --dry-run --allow-dirty && deno run --allow-run=npm scripts/verify_npm_packages.ts",
+    "publish:dry-run": "deno publish --config packages/bunny-ddns-edge-script/deno.json --dry-run --allow-dirty && deno publish --config packages/create-bunny-ddns/deno.json --dry-run --allow-dirty && deno run --allow-run=npm scripts/verify_npm_packages.ts",
     "publish": "deno run --allow-env --allow-net=jsr.io,registry.npmjs.org --allow-run=deno,npm scripts/publish_packages.ts",
     "release:check": "deno run --allow-env=RELEASE_TAG,CI,GH_TOKEN,GITHUB_REPOSITORY --allow-read=package.json,packages --allow-run=git,gh scripts/verify_release_version.ts",
     "release:create": "deno task release:check && deno run --allow-env --allow-read=. --allow-write=.release --allow-run=git,gh scripts/create_github_release.ts",
@@ -40,9 +38,9 @@
     "release:publish": "deno task release:check && deno task validate && deno task publish",
     "release:tag": "deno run --allow-read=package.json,packages --allow-run=git scripts/create_release_tag.ts",
     "setup": "deno ci && deno task hooks:install",
-    "smoke": "deno task --filter @zimme/bunny-ddns-edge-script smoke:package && deno task --filter @zimme/bunny-tunnel-edge-script smoke:package && deno task --filter @zimme/create-bunny-ddns smoke",
+    "smoke": "deno task --filter @zimme/bunny-ddns-edge-script smoke:package && deno task --filter @zimme/create-bunny-ddns smoke",
     "spellcheck": "deno run -A cspell lint --config cspell.json --gitignore --dot --cache --no-progress .",
-    "test": "deno test scripts/*_test.ts && deno task --filter @zimme/bunny-ddns-edge-script test && deno task --filter @zimme/bunny-tunnel-edge-script test && deno task --filter @zimme/create-bunny-ddns test",
+    "test": "deno test scripts/*_test.ts && deno task --filter @zimme/bunny-ddns-edge-script test && deno task --filter @zimme/create-bunny-ddns test",
     "validate": "deno task doctor && deno ci && deno task commits:check && deno task ci",
     "version:set": "deno run --allow-read=package.json,packages --allow-write=package.json,packages scripts/set_version.ts"
   },
@@ -53,8 +51,7 @@
   "lint": {
     "exclude": [
       "packages/*/dist",
-      "examples/edge-script-repo/generated",
-      "examples/tunnel-edge-script-repo/generated"
+      "examples/edge-script-repo/generated"
     ]
   }
 }

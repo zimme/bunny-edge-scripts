@@ -8,7 +8,6 @@
     ".npm-cache",
     "dist",
     "examples/edge-script-repo/generated",
-    "examples/tunnel-edge-script-repo/generated",
     "node_modules",
     "package-lock.json"
   ],
@@ -26,7 +25,6 @@
     "badip",
     "bunny",
     "checkip",
-    "cloudflared",
     "CodeQL",
     "denoland",
     "ddns",
@@ -37,7 +35,6 @@
     "EnviromentalVariables",
     "flase",
     "healthz",
-    "HMAC",
     "hostnames",
     "HOSTNAMES",
     "inadyn",
@@ -53,7 +50,6 @@
     "preflighted",
     "spoofable",
     "subrequest",
-    "tailscale",
     "worktree",
     "zimme"
   ]

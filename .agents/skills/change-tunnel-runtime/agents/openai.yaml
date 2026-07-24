@@ -1,4 +1,0 @@
-interface:
-  display_name: "Change Tunnel Runtime"
-  short_description: "Safely change tunnel runtime behavior"
-  default_prompt: "Use $change-tunnel-runtime to implement and validate this tunnel runtime change."

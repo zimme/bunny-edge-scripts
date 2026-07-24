@@ -1,6 +1,5 @@
 export const packageDirectories = [
   "packages/bunny-ddns-edge-script",
-  "packages/bunny-tunnel-edge-script",
   "packages/create-bunny-ddns",
 ] as const;
 

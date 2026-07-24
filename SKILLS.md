@@ -14,8 +14,6 @@ focused workflow and OpenAI interface metadata used by compatible coding agents.
   publishing, and releases.
 - `change-security-configuration`: environment configuration that affects
   authorization, scoping, secrets, and transport trust.
-- `change-tunnel-runtime`: routing, viewer authorization, proxying, forwarded
-  headers, limits, and origin signing.
 - `setup-bunny-ddns`: create, validate, and hand off a secure personal Bunny
   DDNS deployment repository.
 

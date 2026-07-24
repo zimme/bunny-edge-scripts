@@ -5,7 +5,6 @@ const expectedSkills = [
   "change-ddns-behavior",
   "change-deployment",
   "change-security-configuration",
-  "change-tunnel-runtime",
   "setup-bunny-ddns",
 ];
 

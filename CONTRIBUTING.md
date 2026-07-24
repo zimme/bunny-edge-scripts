@@ -53,7 +53,7 @@ package contract unless they are re-exported from that package's root module.
 
 ## Versioning
 
-This project uses Semantic Versioning with all three packages released at one
+This project uses Semantic Versioning with both packages released at one
 lockstep version. Conventional Commits determine the changelog sections and
 communicate impact:
 
