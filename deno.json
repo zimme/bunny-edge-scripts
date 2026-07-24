@@ -10,7 +10,7 @@
     "conventional-changelog": "npm:conventional-changelog@8.1.0",
     "conventional-changelog-conventionalcommits": "npm:conventional-changelog-conventionalcommits@10.2.1",
     "cspell": "npm:cspell@10.0.1",
-    "typescript": "npm:typescript@6.0.3",
+    "typescript": "npm:typescript@7.0.2",
     "yaml": "npm:yaml@2.9.0"
   },
   "tasks": {
