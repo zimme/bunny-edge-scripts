@@ -39,17 +39,18 @@ for await (const entry of walk(`${packageDir}/src`)) {
 
 if (hasTypeScript) {
   await runDeno(["bundle", "src/mod.ts", "-o", "dist/mod.js"]);
-  if (await exists(`${packageDir}/src/main.ts`)) {
+  for (const entrypoint of ["main", "provision"]) {
+    if (!await exists(`${packageDir}/src/${entrypoint}.ts`)) continue;
     await runDeno([
       "bundle",
       "--external",
       "@bunny.net/edgescript-sdk",
-      "src/main.ts",
+      `src/${entrypoint}.ts`,
       "-o",
-      "dist/main.js",
+      `dist/${entrypoint}.js`,
     ]);
     try {
-      await Deno.chmod(`${distDir}/main.js`, 0o755);
+      await Deno.chmod(`${distDir}/${entrypoint}.js`, 0o755);
     } catch {
       // chmod is not available on every platform Deno supports.
     }

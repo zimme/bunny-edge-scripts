@@ -25,7 +25,7 @@
     "devcontainer:exec": "deno run -A --no-config --no-lock npm:@devcontainers/cli@0.87.0 exec --workspace-folder .",
     "devcontainer:up": "deno run -A --no-config --no-lock npm:@devcontainers/cli@0.87.0 up --workspace-folder . --frozen-lockfile",
     "doctor": "deno run --allow-read=.tool-versions --allow-run=node,npm,gh,copilot scripts/verify_toolchain.ts",
-    "docs:check": "deno doc --lint packages/bunny-ddns-edge-script/src/mod.ts packages/bunny-tunnel-edge-script/src/mod.ts packages/create-bunny-ddns/src/mod.ts",
+    "docs:check": "deno doc --lint packages/bunny-ddns-edge-script/src/mod.ts packages/bunny-tunnel-edge-script/src/mod.ts packages/create-bunny-ddns/src/mod.ts packages/create-bunny-ddns/src/provision.ts",
     "audit": "deno audit",
     "ci": "deno task agents:check && deno fmt --check && deno task spellcheck && deno lint && deno task check && deno task docs:check && deno task test && deno task build && deno task smoke && deno task audit && deno task publish:dry-run",
     "fmt": "deno fmt",

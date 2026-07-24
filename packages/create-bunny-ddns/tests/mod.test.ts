@@ -1,9 +1,10 @@
 import { defaultOptions, scaffoldProject } from "../src/mod.ts";
 import { main } from "../src/main.ts";
+import { provisionBunnyEdgeScript } from "../src/bunny.ts";
 import {
-  generateDdnsSharedSecret,
-  provisionBunnyEdgeScript,
-} from "../src/bunny.ts";
+  type PrivateTerminalIO,
+  provisionFromPrivateTerminal,
+} from "../src/provision.ts";
 
 function assertIncludes(value: string, expected: string): void {
   if (!value.includes(expected)) {
@@ -21,7 +22,13 @@ Deno.test("dry-run scaffold returns expected Bunny Git files", async () => {
     throw new Error("Missing deno.json");
   }
   for (
-    const file of ["AGENTS.md", "LICENSE", ".tool-versions", ".env.example"]
+    const file of [
+      "AGENTS.md",
+      "LICENSE",
+      ".tool-versions",
+      ".env.example",
+      "provision.ts",
+    ]
   ) {
     if (!result.files.includes(file)) {
       throw new Error(`Missing ${file}`);
@@ -48,16 +55,36 @@ Deno.test("scaffold writes a GitHub Action workflow when requested", async () =>
   const readme = await Deno.readTextFile(`${directory}/README.md`);
   assertIncludes(readme, "GitHub Action Upload");
   assertIncludes(readme, "Ask An AI Agent");
+  assertIncludes(readme, "SAFE AI HANDOFF");
+  assertIncludes(readme, "stop and wait");
 
   const agentInstructions = await Deno.readTextFile(`${directory}/AGENTS.md`);
   assertIncludes(agentInstructions, "deno task ci");
   assertIncludes(agentInstructions, "Never commit, print, log");
   assertIncludes(agentInstructions, "scope is declared in `.env.example`");
   assertIncludes(agentInstructions, ".github/workflows/deploy.yml");
+  assertIncludes(agentInstructions, "Never ask the user for credentials");
+  assertIncludes(agentInstructions, "must never be run by an AI agent");
 
   const denoJson = await Deno.readTextFile(`${directory}/deno.json`);
   assertIncludes(denoJson, "jsr:@zimme/bunny-ddns-edge-script@^1.0.0");
+  assertIncludes(
+    denoJson,
+    "jsr:@zimme/create-bunny-ddns@^1.0.0/provision",
+  );
   assertIncludes(denoJson, "npm:@bunny.net/edgescript-sdk@0.12.1");
+  assertIncludes(denoJson, "deno run --allow-net=api.bunny.net provision.ts");
+
+  const provisionSource = await Deno.readTextFile(
+    `${directory}/provision.ts`,
+  );
+  assertIncludes(provisionSource, "provisionFromPrivateTerminal");
+  if (
+    provisionSource.includes("account-key") ||
+    provisionSource.includes("client-secret")
+  ) {
+    throw new Error("Generated provisioning source contains credentials");
+  }
 
   const gitignore = await Deno.readTextFile(`${directory}/.gitignore`);
   assertIncludes(gitignore, ".bunny/");
@@ -235,11 +262,209 @@ Deno.test("Bunny provisioning refuses to overwrite an existing script", async ()
   }
 });
 
-Deno.test("generated DDNS secrets are 256-bit base64url values", () => {
-  const first = generateDdnsSharedSecret();
-  const second = generateDdnsSharedSecret();
-  if (!/^[A-Za-z0-9_-]{43}$/.test(first) || first === second) {
-    throw new Error("Generated DDNS secret has an unexpected format");
+Deno.test("private-terminal provisioning never prints credentials", async () => {
+  const outputs: string[] = [];
+  const prompts: string[] = [];
+  const secrets = [
+    "account-key",
+    "a-strong-ddns-secret-from-a-password-manager",
+    "a-strong-ddns-secret-from-a-password-manager",
+  ];
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const io: PrivateTerminalIO = {
+    isTerminal: true,
+    readAcknowledgement(promptText) {
+      prompts.push(promptText);
+      return "I AM IN A PRIVATE TERMINAL";
+    },
+    readSecret(promptText) {
+      prompts.push(promptText);
+      return Promise.resolve(secrets.shift() ?? "");
+    },
+    write(message) {
+      outputs.push(message);
+    },
+  };
+  const fetcher = (url: string | URL | Request, init?: RequestInit) => {
+    requests.push({ url: String(url), init });
+    if (requests.length === 1) {
+      return Promise.resolve(Response.json({ Items: [] }));
+    }
+    if (requests.length === 2) {
+      return Promise.resolve(Response.json({
+        Id: 42,
+        Name: "home-ddns",
+        DefaultHostname: "home-ddns.edge.bunny.net",
+      }, { status: 201 }));
+    }
+    return Promise.resolve(new Response(null, { status: 204 }));
+  };
+
+  const result = await provisionFromPrivateTerminal(
+    {
+      scriptName: "home-ddns",
+      ddnsUsername: "inadyn",
+      allowedHosts: "home.example.com",
+      allowedZones: "",
+    },
+    io,
+    fetcher as typeof fetch,
+  );
+
+  if (result.scriptId !== 42 || requests.length !== 7) {
+    throw new Error("Private-terminal provisioning did not complete");
+  }
+  const transcript = [...outputs, ...prompts].join("\n");
+  for (
+    const expected of [
+      "BEGIN SAFE AI HANDOFF",
+      "Bunny provisioning: complete",
+      "Script ID: 42",
+      "Script hostname: home-ddns.edge.bunny.net",
+      "Git integration: pending user dashboard action",
+      "END SAFE AI HANDOFF",
+    ]
+  ) {
+    assertIncludes(transcript, expected);
+  }
+  for (
+    const secret of [
+      "account-key",
+      "a-strong-ddns-secret-from-a-password-manager",
+    ]
+  ) {
+    if (transcript.includes(secret)) {
+      throw new Error("Private-terminal transcript exposed a credential");
+    }
+  }
+});
+
+Deno.test("provisioning refuses non-interactive agent execution", async () => {
+  let readAttempted = false;
+  let requestAttempted = false;
+  const io: PrivateTerminalIO = {
+    isTerminal: false,
+    readAcknowledgement() {
+      readAttempted = true;
+      return null;
+    },
+    readSecret() {
+      readAttempted = true;
+      return Promise.resolve("");
+    },
+    write() {},
+  };
+
+  let message = "";
+  try {
+    await provisionFromPrivateTerminal(
+      {
+        scriptName: "home-ddns",
+        ddnsUsername: "inadyn",
+        allowedHosts: "home.example.com",
+        allowedZones: "",
+      },
+      io,
+      (() => {
+        requestAttempted = true;
+        return Promise.resolve(new Response());
+      }) as typeof fetch,
+    );
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+
+  if (
+    !message.includes("private terminal") || readAttempted || requestAttempted
+  ) {
+    throw new Error("Non-interactive provisioning did not fail closed");
+  }
+});
+
+Deno.test("provisioning requires the private-terminal acknowledgement", async () => {
+  let secretReadAttempted = false;
+  let requestAttempted = false;
+  const io: PrivateTerminalIO = {
+    isTerminal: true,
+    readAcknowledgement() {
+      return "continue";
+    },
+    readSecret() {
+      secretReadAttempted = true;
+      return Promise.resolve("");
+    },
+    write() {},
+  };
+
+  let message = "";
+  try {
+    await provisionFromPrivateTerminal(
+      {
+        scriptName: "home-ddns",
+        ddnsUsername: "inadyn",
+        allowedHosts: "home.example.com",
+        allowedZones: "",
+      },
+      io,
+      (() => {
+        requestAttempted = true;
+        return Promise.resolve(new Response());
+      }) as typeof fetch,
+    );
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+
+  if (
+    !message.includes("acknowledgement") ||
+    secretReadAttempted ||
+    requestAttempted
+  ) {
+    throw new Error(
+      "Missing private-terminal acknowledgement did not fail closed",
+    );
+  }
+});
+
+Deno.test("provisioning rejects mismatched DDNS secret confirmation", async () => {
+  const secrets = [
+    "account-key",
+    "a-strong-ddns-secret-from-a-password-manager",
+    "a-different-strong-ddns-secret-value",
+  ];
+  let requestAttempted = false;
+  const io: PrivateTerminalIO = {
+    isTerminal: true,
+    readAcknowledgement() {
+      return "I AM IN A PRIVATE TERMINAL";
+    },
+    readSecret() {
+      return Promise.resolve(secrets.shift() ?? "");
+    },
+    write() {},
+  };
+
+  let message = "";
+  try {
+    await provisionFromPrivateTerminal(
+      {
+        scriptName: "home-ddns",
+        ddnsUsername: "inadyn",
+        allowedHosts: "home.example.com",
+        allowedZones: "",
+      },
+      io,
+      (() => {
+        requestAttempted = true;
+        return Promise.resolve(new Response());
+      }) as typeof fetch,
+    );
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+
+  if (!message.includes("did not match") || requestAttempted) {
+    throw new Error("Mismatched secret confirmation did not fail closed");
   }
 });
 
@@ -275,7 +500,7 @@ Deno.test("Bunny API errors do not echo response bodies or secrets", async () =>
   }
 });
 
-Deno.test("non-interactive CLI prints complete manual Bunny setup", async () => {
+Deno.test("scaffold CLI prints credential-safe Bunny handoff", async () => {
   const directory = await Deno.makeTempDir();
   const messages: string[] = [];
   const originalLog = console.log;
@@ -291,11 +516,15 @@ Deno.test("non-interactive CLI prints complete manual Bunny setup", async () => 
   const output = messages.join("\n");
   for (
     const expected of [
-      "Automatic Bunny setup was skipped",
+      "No credentials were requested or accessed",
+      "Safest setup (recommended)",
       "Deploy and edit with GitHub",
       "BUNNY_API_KEY=<your Bunny account API key>",
       "DDNS_SHARED_SECRET=<a strong, unique secret for inadyn>",
       "DDNS_ALLOW_ALL_HOSTS=true",
+      "deno task provision",
+      "not controlled or recorded by AI",
+      "SAFE AI HANDOFF",
     ]
   ) {
     assertIncludes(output, expected);

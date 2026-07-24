@@ -45,10 +45,10 @@ Give a coding agent this prompt:
 > Set up Bunny DDNS for me in a new private GitHub repository named
 > `<repo-name>` using <https://github.com/zimme/bunny-edge-scripts>. Read and
 > follow `AI_SETUP.md` and the `setup-bunny-ddns` Agent Skill from that
-> repository. Ask me only for missing hostname or zone scope, and pause so I can
-> enter Bunny credentials directly into a masked prompt. Never put secrets in
-> chat, files, Git, GitHub, logs, or command arguments. Use Bunny's Git
-> integration and finish everything that can be completed safely.
+> repository. Ask me only for missing hostname or zone scope. Never ask for
+> credentials or run `deno task provision`. Use Bunny's Git integration, finish
+> every non-secret step, and give me a precise dashboard or private-terminal
+> handoff for the remaining credential entry.
 
 Replace `<repo-name>` and change `private` to `public` when appropriate. The
 agent-facing [AI setup runbook](AI_SETUP.md) defines the deterministic commands,
@@ -74,11 +74,14 @@ With npm's initializer shorthand, the generator is also available as:
 npm init @zimme/bunny-ddns
 ```
 
-The generator asks for setup choices, resolves dependencies, and creates a
-`deno.lock`. It can optionally use a Bunny API key from a masked prompt to
-create and configure the Edge Script. The key is held only in memory and is
-never written to generated files. When the key is skipped, the generator prints
-the complete manual Bunny and Git integration setup.
+The generator asks only for non-secret setup choices, resolves dependencies, and
+creates a `deno.lock`. It never requests Bunny credentials or needs Bunny
+network access. Generated repositories provide dashboard instructions and an
+optional `deno task provision` command that the user runs only in a separate
+private terminal after ending AI sessions. That command asks for both
+credentials with hidden input and never prints or saves them. It emits a
+non-secret `SAFE AI HANDOFF` block the user can paste back so the agent can
+continue with Git integration and deployment guidance.
 
 ## Manual Install
 
@@ -159,8 +162,9 @@ If you prefer manual editor deployment, build the same file and paste
 `generated/script.ts` into Bunny's script editor. The generated file is a deploy
 artifact, not the place to maintain your source.
 
-The scaffold generator can create and configure the Bunny Edge Script through
-the official Scripting API. Connecting the repository still uses Bunny's
+The separate, user-owned provisioning task can create and configure the Bunny
+Edge Script through the official Scripting API. The scaffold generator itself
+never requests credentials. Connecting the repository still uses Bunny's
 dashboard GitHub authorization flow.
 
 ## What It Provides

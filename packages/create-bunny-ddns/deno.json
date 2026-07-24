@@ -5,12 +5,13 @@
     ".": "./src/mod.ts",
     "./create": "./src/main.ts",
     "./mod": "./src/mod.ts",
-    "./main": "./src/main.ts"
+    "./main": "./src/main.ts",
+    "./provision": "./src/provision.ts"
   },
   "tasks": {
     "build": "deno run --allow-read --allow-write --allow-env --allow-run=deno ../../scripts/build_npm_package.ts .",
     "build:types": "deno eval \"\"",
-    "check": "deno check src/main.ts src/mod.ts tests/mod.test.ts",
+    "check": "deno check src/main.ts src/mod.ts src/provision.ts tests/mod.test.ts",
     "smoke": "deno run --allow-read --allow-write --allow-env src/main.ts --dry-run --yes --dir /tmp/bunny-ddns-edge-script-smoke",
     "test": "deno test --allow-read --allow-write --allow-env tests"
   },
@@ -22,7 +23,9 @@
       "src/main.d.ts",
       "src/main.ts",
       "src/mod.d.ts",
-      "src/mod.ts"
+      "src/mod.ts",
+      "src/provision.d.ts",
+      "src/provision.ts"
     ]
   }
 }

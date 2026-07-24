@@ -33,8 +33,8 @@ Give an AI coding agent this prompt:
 > `<repo-name>` using <https://github.com/zimme/bunny-edge-scripts>. Read and
 > follow `AI_SETUP.md` and the `setup-bunny-ddns` Agent Skill from that
 > repository. Keep credentials out of chat, files, Git, GitHub, logs, and
-> command arguments. Pause so I can enter the Bunny API key directly into the
-> masked generator prompt.
+> command arguments. Never run `deno task provision`; give me a precise
+> user-owned credential handoff instead.
 
 Every generated repository includes its own `AGENTS.md` with Deno commands,
 secret-handling rules, Bunny Git settings, and completion criteria. The source
@@ -44,11 +44,13 @@ and
 [setup skill](https://github.com/zimme/bunny-edge-scripts/blob/main/.agents/skills/setup-bunny-ddns/SKILL.md)
 are the canonical agent workflow.
 
-In an interactive terminal, the generator optionally asks for your Bunny API key
-using a masked prompt. When provided, it creates the Edge Script, generates the
-DDNS shared secret, and configures Bunny environment secrets and variables. The
-API key is held only in memory and is never written to the generated repo.
+The generator asks only for non-secret project configuration. It has no Bunny
+network permission and never requests a Bunny API key or DDNS secret.
 
-Leave the prompt empty, use `--yes`, or run non-interactively to skip automatic
-provisioning. The command then prints complete instructions for creating the
-script, connecting the GitHub repository, and configuring Bunny manually.
+The generated repository recommends entering secrets directly in Bunny's
+dashboard. It also includes an optional `deno task provision` command for the
+user to run in a separate private terminal after ending all AI sessions. The
+command requires an explicit acknowledgement, reads both credentials without
+echo, and never prints or saves either value. AI agents must not invoke or
+observe it. On success it emits a non-secret `SAFE AI HANDOFF` block; paste only
+that block back into the AI task so the agent can resume the remaining setup.

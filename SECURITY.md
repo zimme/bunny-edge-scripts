@@ -19,6 +19,23 @@ Scripting as a secret. DDNS clients receive only a separate DDNS secret. A
 client that knows the DDNS secret can request updates for any hostname allowed
 by the script configuration.
 
+### Agent-Assisted Setup
+
+The scaffold generator never requests credentials and has no Bunny network
+permission. AI agents may generate, validate, commit, and push deployment code,
+but must never receive credentials or invoke a generated repository's
+`deno task provision`.
+
+The safest credential path is direct entry into Bunny Environment Secrets in a
+user-controlled browser. Optional automatic provisioning is a separate
+user-owned command that must run only after AI sessions with terminal access
+have ended. It requires an interactive acknowledgement, reads the Bunny account
+key and a password-manager-owned DDNS secret without echo, and never prints or
+saves either credential. Masked terminal input alone is not considered an AI
+provider isolation boundary. The command's explicitly marked `SAFE AI HANDOFF`
+block contains only non-secret deployment status and may be returned to an agent
+after the private command exits.
+
 Update requests must provide explicit IP query parameters. The package does not
 trust forwarding headers to decide which address should be written into DNS.
 

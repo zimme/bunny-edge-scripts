@@ -34,6 +34,10 @@
     "./main": {
       "types": "./dist/main.d.ts",
       "import": "./dist/main.js"
+    },
+    "./provision": {
+      "types": "./dist/provision.d.ts",
+      "import": "./dist/provision.js"
     }
   },
   "types": "./dist/mod.d.ts",
