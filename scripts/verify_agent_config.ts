@@ -6,6 +6,7 @@ const expectedSkills = [
   "change-deployment",
   "change-security-configuration",
   "change-tunnel-runtime",
+  "setup-bunny-ddns",
 ];
 
 const imports = new Map([

@@ -7,7 +7,11 @@ publish.
 ## One-Time Setup
 
 Create each `@zimme/*` package on JSR and link it to `zimme/bunny-edge-scripts`
-with `.github/workflows/publish.yml` as its trusted publishing workflow.
+with `.github/workflows/publish.yml` as its trusted publishing workflow. Set
+each JSR package description to the matching `package.json` description. Mark
+Deno as supported for all three packages; leave untested runtime compatibility
+as unknown, except that the generator is unsupported outside Deno. JSR uses
+these settings in package pages and search results.
 
 On npm, configure a GitHub Actions trusted publisher for each package:
 

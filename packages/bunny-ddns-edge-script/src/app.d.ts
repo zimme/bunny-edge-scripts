@@ -258,21 +258,16 @@ export const DNS_RECORD_TYPE_AAAA: 1;
  * @property {BunnyDnsZone} zone
  * @property {string} domain
  */
-/**
- * @param {HandlerOptions} options
- * @returns {(request: Request) => Promise<Response>}
- */
+/** Creates a secure DynDNS-compatible Bunny Edge Script request handler. */
 export function createBunnyDdnsHandler(
   options: HandlerOptions,
 ): (request: Request) => Promise<Response>;
-/**
- * @param {EnvReader} env
- * @returns {RuntimeConfig}
- */
+/** Reads and validates DDNS configuration from Bunny environment values. */
 export function readBunnyDdnsConfigFromEnv(env: EnvReader): RuntimeConfig;
 export type DdnsRecordType =
   | typeof DNS_RECORD_TYPE_A
   | typeof DNS_RECORD_TYPE_AAAA;
+/** Fetch-compatible function used for Bunny DNS API requests. */
 export type Fetcher = (
   input: string | URL | Request,
   init?: RequestInit,
@@ -313,7 +308,9 @@ export type BunnyDnsZone = {
   Domain: string;
   Records?: BunnyDnsRecord[] | null | undefined;
 };
+/** Policy for hostnames with multiple existing records of one address family. */
 export type MultiRecordMode = "reject" | "update-all";
+/** Validated runtime configuration for the DDNS handler. */
 export type RuntimeConfig = {
   apiBaseUrl: string;
   bunnyApiKey: string;
@@ -332,9 +329,11 @@ export type RuntimeConfig = {
   maxMutations: number;
   managedComment: string;
 };
+/** Minimal environment-variable reader supported by Bunny Edge Scripting. */
 export type EnvReader = {
   get: (name: string) => string | undefined;
 };
+/** Dependencies and configuration accepted by the DDNS handler factory. */
 export type HandlerOptions = {
   config: RuntimeConfig;
   fetcher?: Fetcher | undefined;

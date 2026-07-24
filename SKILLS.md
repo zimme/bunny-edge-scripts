@@ -16,6 +16,8 @@ focused workflow and OpenAI interface metadata used by compatible coding agents.
   authorization, scoping, secrets, and transport trust.
 - `change-tunnel-runtime`: routing, viewer authorization, proxying, forwarded
   headers, limits, and origin signing.
+- `setup-bunny-ddns`: create, validate, and hand off a secure personal Bunny
+  DDNS deployment repository.
 
 Load only the skill relevant to the current task. Validate the catalog and its
 Claude, Gemini, and Copilot compatibility shims with:

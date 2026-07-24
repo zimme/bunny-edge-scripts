@@ -38,6 +38,24 @@ script file for deploy paths that upload a single script.
 
 ## Install
 
+### Ask An AI Agent
+
+Give a coding agent this prompt:
+
+> Set up Bunny DDNS for me in a new private GitHub repository named
+> `<repo-name>` using <https://github.com/zimme/bunny-edge-scripts>. Read and
+> follow `AI_SETUP.md` and the `setup-bunny-ddns` Agent Skill from that
+> repository. Ask me only for missing hostname or zone scope, and pause so I can
+> enter Bunny credentials directly into a masked prompt. Never put secrets in
+> chat, files, Git, GitHub, logs, or command arguments. Use Bunny's Git
+> integration and finish everything that can be completed safely.
+
+Replace `<repo-name>` and change `private` to `public` when appropriate. The
+agent-facing [AI setup runbook](AI_SETUP.md) defines the deterministic commands,
+security boundaries, validation, GitHub creation, and Bunny dashboard handoff.
+
+### Run The Generator
+
 To create a personal deployment repo, use the scaffold generator:
 
 ```sh
@@ -423,8 +441,9 @@ deno task validate
 `deno task validate` is the complete check used by CI. It verifies the pinned
 toolchain, performs a frozen dependency install, checks Conventional Commits,
 and runs formatting, spelling, agent configuration, linting, typechecking,
-tests, builds, smoke checks, dependency audit, and JSR/npm publication dry-runs.
-GitHub Actions sets `CI=true`; no separate CI-only script is maintained.
+public API documentation linting, tests, builds, smoke checks, dependency audit,
+and JSR/npm publication dry-runs. GitHub Actions sets `CI=true`; no separate
+CI-only script is maintained.
 
 Agent-wide project guidance lives in `AGENTS.md`. Focused workflows use the open
 Agent Skills format under `.agents/skills/`, with compatibility shims for GitHub

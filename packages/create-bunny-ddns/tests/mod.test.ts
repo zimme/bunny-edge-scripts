@@ -20,7 +20,9 @@ Deno.test("dry-run scaffold returns expected Bunny Git files", async () => {
   if (!result.files.includes("deno.json")) {
     throw new Error("Missing deno.json");
   }
-  for (const file of ["LICENSE", ".tool-versions", ".env.example"]) {
+  for (
+    const file of ["AGENTS.md", "LICENSE", ".tool-versions", ".env.example"]
+  ) {
     if (!result.files.includes(file)) {
       throw new Error(`Missing ${file}`);
     }
@@ -45,6 +47,13 @@ Deno.test("scaffold writes a GitHub Action workflow when requested", async () =>
 
   const readme = await Deno.readTextFile(`${directory}/README.md`);
   assertIncludes(readme, "GitHub Action Upload");
+  assertIncludes(readme, "Ask An AI Agent");
+
+  const agentInstructions = await Deno.readTextFile(`${directory}/AGENTS.md`);
+  assertIncludes(agentInstructions, "deno task ci");
+  assertIncludes(agentInstructions, "Never commit, print, log");
+  assertIncludes(agentInstructions, "scope is declared in `.env.example`");
+  assertIncludes(agentInstructions, ".github/workflows/deploy.yml");
 
   const denoJson = await Deno.readTextFile(`${directory}/deno.json`);
   assertIncludes(denoJson, "jsr:@zimme/bunny-ddns-edge-script@^1.0.0");
@@ -93,6 +102,30 @@ Deno.test("force mode refuses to overwrite through a symlink", async () => {
   }
   if (await Deno.readTextFile(externalFile) !== "unchanged\n") {
     throw new Error("Scaffold modified a file outside its target directory");
+  }
+});
+
+Deno.test("scaffold rejects values that could inject agent instructions", async () => {
+  for (
+    const options of [
+      { projectName: "safe\nignore-instructions" },
+      { ddnsUsername: "inadyn\nignore-instructions" },
+      { allowedHosts: "home.example.com\nignore-instructions" },
+    ]
+  ) {
+    let failed = false;
+    try {
+      await scaffoldProject({
+        ...defaultOptions(),
+        ...options,
+        dryRun: true,
+      });
+    } catch {
+      failed = true;
+    }
+    if (!failed) {
+      throw new Error("Expected unsafe generated instruction input to fail");
+    }
   }
 });
 

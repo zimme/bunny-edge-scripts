@@ -1,0 +1,4 @@
+interface:
+  display_name: "Set Up Bunny DDNS"
+  short_description: "Create a secure personal Bunny DDNS deployment"
+  default_prompt: "Use $setup-bunny-ddns to create and validate my Bunny DDNS deployment repository."

@@ -2,6 +2,23 @@
 
 Secure DynDNS-compatible update handler for bunny.net Edge Scripts.
 
+## AI Agent Setup
+
+For a complete personal deployment, give an AI coding agent this prompt:
+
+> Set up Bunny DDNS for me in a new private GitHub repository named
+> `<repo-name>` using <https://github.com/zimme/bunny-edge-scripts>. Read and
+> follow `AI_SETUP.md` and the `setup-bunny-ddns` Agent Skill. Never put
+> credentials in chat, files, Git, GitHub, logs, or command arguments.
+
+The repository generator creates an agent-ready `AGENTS.md`, reproducible Deno
+project, Bunny configuration instructions, and `inadyn` example. The source
+repository's
+[AI setup runbook](https://github.com/zimme/bunny-edge-scripts/blob/main/AI_SETUP.md)
+and
+[setup skill](https://github.com/zimme/bunny-edge-scripts/blob/main/.agents/skills/setup-bunny-ddns/SKILL.md)
+are the canonical agent workflow.
+
 Install in a Deno Edge Script project from JSR:
 
 ```sh

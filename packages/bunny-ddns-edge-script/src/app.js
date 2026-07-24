@@ -165,6 +165,7 @@ export function createHandler(options) {
   };
 }
 
+/** Secure, descriptive alias for {@link createHandler}. */
 export const createBunnyDdnsHandler = createHandler;
 
 /**
@@ -229,6 +230,7 @@ export function readConfigFromEnv(env) {
   return config;
 }
 
+/** Secure, descriptive alias for {@link readConfigFromEnv}. */
 export const readBunnyDdnsConfigFromEnv = readConfigFromEnv;
 
 /**

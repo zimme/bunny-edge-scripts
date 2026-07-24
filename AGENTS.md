@@ -42,6 +42,7 @@ deno task agents:check
 deno task fmt
 deno task lint
 deno task check
+deno task docs:check
 deno task test
 deno task build
 deno task validate
@@ -104,6 +105,7 @@ references. Say explicitly when no findings remain and name residual test gaps.
 - `packages/bunny-tunnel-edge-script/src/app.ts`: tunnel routing and proxy
   logic.
 - `packages/create-bunny-ddns/src/`: scaffold generator implementation.
+- `AI_SETUP.md`: consumer-facing AI agent runbook for end-to-end DDNS setup.
 - `packages/*/tests/`: package-focused tests.
 - `examples/*-edge-script-repo/`: minimal consumer deployment repos.
 - `scripts/build_npm_package.ts`: generated npm package artifacts.
@@ -125,4 +127,5 @@ references. Say explicitly when no findings remain and name residual test gaps.
 
 Use a matching skill from `.agents/skills/` for DDNS behavior, Bunny DNS API,
 tunnel runtime, deployment/release, or security-configuration work. `SKILLS.md`
-is the human-readable index; each `SKILL.md` is the executable source.
+is the human-readable index; each `SKILL.md` is the executable source. Use
+`setup-bunny-ddns` when creating a consumer's personal deployment repository.

@@ -2,6 +2,14 @@
 
 Secure edge reverse proxy and origin gateway for bunny.net Edge Scripting.
 
+## AI Agent Integration
+
+An AI coding agent integrating this package should read this README completely,
+use Deno, keep viewer and origin secrets only in Bunny Env Configuration, retain
+HTTPS and authenticated-viewer defaults, run the consumer repository's complete
+validation task, and require explicit approval before making the tunnel public
+or mutating live Bunny resources.
+
 ```sh
 deno add jsr:@zimme/bunny-tunnel-edge-script
 ```

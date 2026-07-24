@@ -1,49 +1,82 @@
+/** Minimal environment-variable reader supported by Bunny Edge Scripting. */
 export interface EnvReader {
+  /** Returns one environment value, or `undefined` when it is absent. */
   get(name: string): string | undefined;
 }
 
+/** Fetch-compatible function used for origin requests. */
 export type Fetcher = (
   input: string | URL | Request,
   init?: RequestInit,
 ) => Promise<Response>;
 
+/** One origin route, optionally constrained by viewer host and path prefix. */
 export interface TunnelRoute {
+  /** Absolute HTTP(S) origin; HTTPS is required by default. */
   origin: string;
+  /** Optional exact or `*.` wildcard viewer host matcher. */
   host?: string;
+  /** Optional canonical viewer path prefix. */
   pathPrefix?: string;
 }
 
+/** Validated runtime configuration for the tunnel handler. */
 export interface RuntimeConfig {
+  /** Ordered set of validated origin routes. */
   routes: TunnelRoute[];
+  /** Explicitly permits requests without a viewer bearer token. */
   allowPublic: boolean;
+  /** Accepted viewer bearer tokens. */
   viewerTokens: string[];
+  /** Optional HMAC secret used to authenticate requests to the origin. */
   originSharedSecret?: string;
+  /** Uppercase HTTP methods accepted by the edge handler. */
   allowedMethods: string[];
+  /** Canonical path prefixes rejected before route selection. */
   deniedPathPrefixes: string[];
+  /** Explicitly permits non-HTTPS viewer requests. */
   allowInsecureHttp: boolean;
+  /** Explicitly permits HTTP origins. */
   allowInsecureOrigin: boolean;
+  /** Local health-check path served without proxying. */
   healthPath: string;
+  /** Maximum buffered request-body size. */
   maxBodyBytes: number;
+  /** Forwards the viewer Host header instead of the origin host. */
   preserveHostHeader: boolean;
+  /** Origin request timeout in milliseconds. */
   requestTimeoutMs: number;
 }
 
+/** Optional controls for origin-signature verification. */
 export interface VerifySignatureOptions {
+  /** Previously buffered body; avoids consuming `request.body` again. */
   body?: ArrayBuffer;
+  /** Expected signed origin when it differs from `request.url` origin. */
   expectedOrigin?: string | URL;
+  /** Maximum body bytes accepted by verification. */
   maxBodyBytes?: number;
+  /** Injectable clock for deterministic verification. */
   now?: () => Date;
+  /** Atomic nonce store for multi-instance replay protection. */
   replayCache?: SignatureReplayCache;
+  /** Maximum signature age and clock skew in seconds. */
   toleranceSeconds?: number;
 }
 
+/** Atomic nonce store used to reject replayed origin signatures. */
 export interface SignatureReplayCache {
+  /** Returns true only when this nonce has not previously been consumed. */
   consume(nonce: string, expiresAtSeconds: number): boolean | Promise<boolean>;
 }
 
+/** Dependencies and configuration accepted by the tunnel handler factory. */
 export interface HandlerOptions {
+  /** Validated tunnel runtime configuration. */
   config: RuntimeConfig;
+  /** Optional Fetch-compatible origin transport. */
   fetcher?: Fetcher;
+  /** Optional clock used when creating origin signatures. */
   now?: () => Date;
 }
 
@@ -93,6 +126,11 @@ const MAX_REPLAY_CACHE_ENTRIES = 10_000;
 const SIGNATURE_VERSION = "v2";
 const signatureReplayCache = new Map<string, number>();
 
+/**
+ * Reads and validates tunnel configuration from Bunny environment values.
+ *
+ * Secure defaults require HTTPS origins and at least one viewer bearer token.
+ */
 export function readBunnyTunnelConfigFromEnv(env: EnvReader): RuntimeConfig {
   const routes = readRoutes(env);
 
@@ -152,6 +190,15 @@ export function readBunnyTunnelConfigFromEnv(env: EnvReader): RuntimeConfig {
   return config;
 }
 
+/**
+ * Creates a Fetch-compatible Bunny Edge Script request handler.
+ *
+ * @example
+ * ```ts
+ * const config = readBunnyTunnelConfigFromEnv(Deno.env);
+ * const handler = createBunnyTunnelHandler({ config });
+ * ```
+ */
 export function createBunnyTunnelHandler(
   options: HandlerOptions,
 ): (request: Request) => Promise<Response> {
@@ -329,6 +376,12 @@ async function buildUpstreamHeaders(
   return headers;
 }
 
+/**
+ * Verifies a signed origin request, including timestamp, body, and replay
+ * protection.
+ *
+ * The origin must reject requests when this function returns `false`.
+ */
 export async function verifyBunnyTunnelSignature(
   request: Request,
   secret: string,
