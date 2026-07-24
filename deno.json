@@ -9,7 +9,7 @@
     "@zimme/bunny-ddns-edge-script": "./packages/bunny-ddns-edge-script/src/mod.ts",
     "conventional-changelog": "npm:conventional-changelog@8.1.0",
     "conventional-changelog-conventionalcommits": "npm:conventional-changelog-conventionalcommits@10.2.1",
-    "cspell": "npm:cspell@8.19.4",
+    "cspell": "npm:cspell@10.0.1",
     "typescript": "npm:typescript@6.0.3",
     "yaml": "npm:yaml@2.9.0"
   },
