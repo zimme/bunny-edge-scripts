@@ -6,14 +6,13 @@ workflows live in `.agents/skills/` and should be loaded only when relevant.
 
 ## Project intent
 
-This Deno-first monorepo publishes three packages to JSR and npm:
+This Deno-first monorepo publishes two packages to JSR and npm:
 
 - `@zimme/bunny-ddns-edge-script`: secure DynDNS-compatible Bunny DNS updates.
-- `@zimme/bunny-tunnel-edge-script`: a secure Bunny Edge Script HTTP gateway.
 - `@zimme/create-bunny-ddns`: a generator for personal DDNS deployment repos.
 
-Runtime packages execute on Bunny Edge Scripting. DDNS clients receive a limited
-shared secret; Bunny API keys remain in the Edge Script environment.
+The runtime package executes on Bunny Edge Scripting. DDNS clients receive a
+limited shared secret; Bunny API keys remain in the Edge Script environment.
 
 ## Execution environment
 
@@ -56,10 +55,6 @@ commands; use `CI=true` when behavior genuinely needs to differ in CI.
 - Preserve DDNS secure defaults: HTTPS-only, Basic Auth only, no query-string
   credentials, explicit hostname/zone scope (or an explicit account-wide
   acknowledgement), deny-over-allow, and fail-safe multi-record handling.
-- Preserve tunnel secure defaults: HTTPS-only viewers and origins, bounded
-  request bodies, stripped authorization, hop-by-hop, signature, and spoofable
-  forwarding headers, canonicalized deny-first path filtering, strict route
-  validation, and optional origin signing.
 - Keep consumer deployment repos small. Runtime entrypoints should only adapt
   environment configuration and register the package handler.
 - Prefer no runtime dependencies. Explain and document any dependency that is
@@ -108,8 +103,6 @@ references. Say explicitly when no findings remain and name residual test gaps.
 ## Repository map
 
 - `packages/bunny-ddns-edge-script/src/app.js`: DDNS and Bunny DNS logic.
-- `packages/bunny-tunnel-edge-script/src/app.ts`: tunnel routing and proxy
-  logic.
 - `packages/create-bunny-ddns/src/`: scaffold generator implementation.
 - `AI_SETUP.md`: consumer-facing AI agent runbook for end-to-end DDNS setup.
 - `packages/*/tests/`: package-focused tests.
@@ -132,6 +125,6 @@ references. Say explicitly when no findings remain and name residual test gaps.
 ## Task skills
 
 Use a matching skill from `.agents/skills/` for DDNS behavior, Bunny DNS API,
-tunnel runtime, deployment/release, or security-configuration work. `SKILLS.md`
-is the human-readable index; each `SKILL.md` is the executable source. Use
+deployment/release, or security-configuration work. `SKILLS.md` is the
+human-readable index; each `SKILL.md` is the executable source. Use
 `setup-bunny-ddns` when creating a consumer's personal deployment repository.

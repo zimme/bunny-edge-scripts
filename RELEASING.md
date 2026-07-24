@@ -1,17 +1,16 @@
 # Releasing
 
-All three packages use one lockstep Semantic Version. A pushed SemVer tag is the
-only release trigger. Branch pushes and manual workflow dispatches never
-publish.
+Both packages use one lockstep Semantic Version. A pushed SemVer tag is the only
+release trigger. Branch pushes and manual workflow dispatches never publish.
 
 ## One-Time Setup
 
 Create each `@zimme/*` package on JSR and link it to `zimme/bunny-edge-scripts`
 with `.github/workflows/publish.yml` as its trusted publishing workflow. Set
 each JSR package description to the matching `package.json` description. Mark
-Deno as supported for all three packages; leave untested runtime compatibility
-as unknown, except that the generator is unsupported outside Deno. JSR uses
-these settings in package pages and search results.
+Deno as supported for both packages; leave untested runtime compatibility as
+unknown, except that the generator is unsupported outside Deno. JSR uses these
+settings in package pages and search results.
 
 On npm, configure a GitHub Actions trusted publisher for each package:
 
@@ -35,9 +34,9 @@ job receives contents write access but no OIDC.
 2. Choose the next version from the Conventional Commits since the previous
    release.
 3. Run `deno task release:prepare 1.0.0`, replacing `1.0.0` with the chosen
-   version. It requires a clean worktree, updates all seven manifests, and runs
+   version. It requires a clean worktree, updates all five manifests, and runs
    the complete validation suite.
-4. Review all seven manifest changes.
+4. Review all five manifest changes.
 5. Commit the version changes, for example
    `git commit -S -am "chore(release): 1.0.0"`, and merge that commit through
    the normal protected-branch process.
@@ -52,7 +51,7 @@ job receives contents write access but no OIDC.
 
 7. Watch the `Release` workflow. It checks that the tag has no leading `v` and
    exactly matches the root version plus every JSR and npm package version.
-8. Verify all three packages on JSR and npm and inspect the GitHub release.
+8. Verify both packages on JSR and npm and inspect the GitHub release.
 
 Git has no native pre-tag hook. `deno task release:tag` is the repository's safe
 tag-creation interface: it checks the clean worktree, branch, remote commit,

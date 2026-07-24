@@ -14,8 +14,6 @@ WORKDIR /tmp/bunny-edge-scripts
 COPY deno.json deno.lock ./
 COPY packages/bunny-ddns-edge-script/deno.json \
     packages/bunny-ddns-edge-script/
-COPY packages/bunny-tunnel-edge-script/deno.json \
-    packages/bunny-tunnel-edge-script/
 COPY packages/create-bunny-ddns/deno.json packages/create-bunny-ddns/
 
 RUN deno ci \

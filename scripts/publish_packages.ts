@@ -12,10 +12,6 @@ const packages = [
     name: "@zimme/bunny-ddns-edge-script",
   },
   {
-    directory: "packages/bunny-tunnel-edge-script",
-    name: "@zimme/bunny-tunnel-edge-script",
-  },
-  {
     directory: "packages/create-bunny-ddns",
     name: "@zimme/create-bunny-ddns",
   },
