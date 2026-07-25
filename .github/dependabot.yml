@@ -12,12 +12,6 @@ updates:
       prefix: "build(deps)"
     schedule:
       interval: "weekly"
-  - package-ecosystem: "devcontainers"
-    directory: "/"
-    commit-message:
-      prefix: "build(deps)"
-    schedule:
-      interval: "weekly"
   - package-ecosystem: "github-actions"
     directory: "/"
     commit-message:

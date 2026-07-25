@@ -16,7 +16,18 @@ limited shared secret; Bunny API keys remain in the Edge Script environment.
 
 ## Execution environment
 
-Use the Docker Compose-backed Dev Container for repository work. From the host:
+Use the Docker Compose-native development container for repository work. The
+Dockerfile and Compose file are authoritative; Dev Container tooling only
+attaches editor customizations to the same Compose service. From any host with
+Docker Compose:
+
+```sh
+docker compose -f .devcontainer/compose.yaml up --build --detach --wait development
+docker compose -f .devcontainer/compose.yaml exec development <command>
+docker compose -f .devcontainer/compose.yaml down
+```
+
+The equivalent Deno task aliases are:
 
 ```sh
 deno task devcontainer:up
@@ -27,10 +38,13 @@ deno task devcontainer:down
 When already inside the container, run commands directly. The GitHub Copilot
 setup workflow starts the same container before the coding agent begins. CI,
 release jobs, and coding agents use the GHCR prebuild as a cache; the checked-in
-Dev Container and Compose files remain authoritative. The Dockerfile installs
-the frozen dependency graph and prewarms the platform-specific bundler before
-source is mounted. Compose owns the GHCR `cache_from` setting; do not duplicate
-container or dependency caching in workflows.
+Dockerfile and Compose files remain authoritative. The Dockerfile installs every
+CLI, installs the frozen dependency graph, and prewarms the platform-specific
+bundler before source is mounted. Compose owns the runtime user, workspace
+mount, repository setup, readiness check, and GHCR `cache_from` setting. Do not
+add Dev Container Features, mutating lifecycle commands, or duplicate container
+and dependency caching in workflows. A wait-only adapter hook may synchronize
+with Compose health, but it must not install or configure anything.
 
 Use root Deno tasks as the stable command interface. npm exists only for npm
 artifact validation and publication:
@@ -70,7 +84,10 @@ commands; use `CI=true` when behavior genuinely needs to differ in CI.
   revalidates outgoing commit messages created by agents and other automation.
 - Do not create or edit `CHANGELOG.md` by hand. The tag-only release workflow
   generates it from Conventional Commits as a GitHub release artifact.
-- Keep release tags increasing SemVer, annotated, signed, and GitHub-verified.
+- Use Compatible Versioning (ComVer) for every release: tags are `X.Y.0`,
+  backwards-compatible changes increment `Y`, and any incompatible change
+  increments `X` and resets `Y` to zero. This includes incompatible bug fixes.
+- Keep release tags increasing, annotated, signed, and GitHub-verified.
 - Never commit, print, or place Bunny API keys, DDNS secrets, or publish tokens
   in examples, fixtures, logs, or generated files.
 - Never run a consumer repository's `deno task provision` or ask a user to enter

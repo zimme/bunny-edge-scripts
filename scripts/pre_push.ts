@@ -1,4 +1,5 @@
 import {
+  assertComVerHistory,
   assertManifestVersions,
   assertReleaseVersion,
 } from "./release_version.ts";
@@ -104,6 +105,7 @@ async function verifyPushedReleaseTags(
         `Release tag ${tag} must point to a commit already on the pushed main branch.`,
       );
     }
+    await assertComVerHistory(tag, commit, gitOutput);
     await assertManifestVersions(
       tag,
       (path) => gitOutput(["show", `${commit}:${path}`]),

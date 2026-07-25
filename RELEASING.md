@@ -1,9 +1,11 @@
 # Releasing
 
-Both packages use one lockstep Semantic Version. A pushed SemVer tag is the only
-release trigger. Branch pushes and manual workflow dispatches never publish. The
-version `0.0.0` marks an unreleased source checkout; registry commands are valid
-only after a matching signed tag has completed the release workflow.
+Both packages use one lockstep
+[Compatible Versioning](https://gitlab.com/staltz/comver) (ComVer). A pushed
+`MAJOR.MINOR.0` tag is the only release trigger. Branch pushes and manual
+workflow dispatches never publish. The version `0.0.0` marks an unreleased
+source checkout; registry commands are valid only after a matching signed tag
+has completed the release workflow.
 
 ## One-Time Setup
 
@@ -37,7 +39,14 @@ job receives contents write access but no OIDC.
 2. Confirm `main` is current, clean, and passing `CI`, `CodeQL`, and Dependency
    Review.
 3. Choose the next version from the Conventional Commits since the previous
-   release.
+   release:
+   - The first public release is `1.0.0`.
+   - A fully backwards-compatible release increments `MINOR`, including bug
+     fixes: `1.2.0` becomes `1.3.0`.
+   - Any incompatible change increments `MAJOR` and resets `MINOR`, including
+     incompatible bug fixes: `1.2.0` becomes `2.0.0`.
+   - `PATCH` is always zero. Prerelease identifiers such as `2.0.0-rc.1` are
+     allowed.
 4. Run `deno task release:prepare 1.0.0`, replacing `1.0.0` with the chosen
    version. It requires a clean worktree, synchronizes package manifests,
    scaffold defaults, and the checked DDNS example, then runs the complete
@@ -56,7 +65,9 @@ job receives contents write access but no OIDC.
    ```
 
 8. Watch the `Release` workflow. It checks that the tag has no leading `v` and
-   exactly matches the root version plus every JSR and npm package version.
+   exactly matches the root version plus every JSR and npm package version. It
+   also independently verifies the ComVer shape and required compatibility bump
+   from the previous release.
 9. Verify both packages on JSR and npm, test the documented `deno create`,
    `deno add`, and npm commands in clean directories, and inspect the GitHub
    release.
@@ -67,8 +78,9 @@ manifest versions, and existing tags before invoking `git tag -s`. Running
 `deno task setup` installs tracked `commit-msg` and `pre-push` hooks. They
 reject invalid Conventional Commit messages, including outgoing commits created
 by automation, before the pre-push guard checks release tags for valid shape,
-signatures, matching versions, and reachability from pushed `main`. The release
-workflow repeats these checks because local hooks can be bypassed.
+the required ComVer bump, signatures, matching versions, and reachability from
+pushed `main`. The release workflow repeats these checks because local hooks can
+be bypassed.
 
 The workflow publishes packages only after full validation succeeds. It then
 creates the GitHub release from Conventional Commits, using the latest section

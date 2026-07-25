@@ -1,34 +1,18 @@
 {
   "name": "bunny-edge-scripts",
   "dockerComposeFile": "compose.yaml",
-  "service": "workspace",
+  "service": "development",
   "workspaceFolder": "/workspaces/bunny-edge-scripts",
+  "overrideCommand": false,
   "shutdownAction": "stopCompose",
   "remoteUser": "vscode",
+  "postStartCommand": "until test -f /tmp/bunny-edge-scripts-ready; do sleep 1; done",
+  "waitFor": "postStartCommand",
   "hostRequirements": {
     "cpus": 2,
     "memory": "4gb",
     "storage": "16gb"
   },
-  "features": {
-    "ghcr.io/devcontainers/features/common-utils:2.5.9": {
-      "upgradePackages": false
-    },
-    "ghcr.io/devcontainers/features/node:2.1.0": {
-      "version": "24.13.1",
-      "nodeGypDependencies": false,
-      "npmVersion": "11.8.0",
-      "pnpmVersion": "none",
-      "nvmVersion": "0.40.6"
-    },
-    "ghcr.io/devcontainers/features/github-cli:1.1.0": {
-      "version": "2.96.0"
-    },
-    "ghcr.io/devcontainers/features/copilot-cli:1.1.3": {
-      "version": "1.0.72"
-    }
-  },
-  "postCreateCommand": "deno task setup",
   "customizations": {
     "vscode": {
       "extensions": [

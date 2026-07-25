@@ -93,7 +93,16 @@ workflow.
 
 ## Development
 
-Use the Docker Compose-backed Dev Container:
+The development environment is native Docker Compose; Dev Container tooling is
+optional and attaches to the same service:
+
+```sh
+docker compose -f .devcontainer/compose.yaml up --build --detach --wait development
+docker compose -f .devcontainer/compose.yaml exec development deno task validate
+docker compose -f .devcontainer/compose.yaml down
+```
+
+Equivalent Deno task aliases are available when Deno is installed on the host:
 
 ```sh
 deno task devcontainer:up
@@ -103,7 +112,10 @@ deno task devcontainer:down
 
 `deno task validate` is the complete local and CI check. Deno is the repository
 toolchain; Node and npm are retained only to validate and publish npm artifacts.
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [RELEASING.md](RELEASING.md).
+Releases use [Compatible Versioning](https://gitlab.com/staltz/comver):
+compatible changes increment `MINOR`, incompatible changes increment `MAJOR`,
+and `PATCH` is always zero. See [CONTRIBUTING.md](CONTRIBUTING.md) and
+[RELEASING.md](RELEASING.md).
 
 ## License
 

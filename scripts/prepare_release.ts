@@ -1,4 +1,5 @@
 import {
+  assertComVerHistory,
   assertReleaseVersion,
   setManifestVersions,
 } from "./release_version.ts";
@@ -16,6 +17,7 @@ if (await gitOutput(["tag", "--list", version])) {
   throw new Error(`Tag ${version} already exists.`);
 }
 
+await assertComVerHistory(version, "HEAD", gitOutput);
 await setManifestVersions(version);
 console.log(`Set all package versions to ${version}. Running validation...`);
 

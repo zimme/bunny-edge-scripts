@@ -14,15 +14,112 @@ export const versionManifestPaths = [
 export const generatorVersionSource = "packages/create-bunny-ddns/src/mod.ts";
 export const exampleImportMapPath = "examples/ddns-edge-script-repo/deno.json";
 
-const SEMVER_PATTERN =
-  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:(?:0|[1-9]\d*)|(?:\d*[a-z-][0-9a-z-]*))(?:\.(?:(?:0|[1-9]\d*)|(?:\d*[a-z-][0-9a-z-]*)))*)?$/i;
+const COMPATIBLE_VERSION_PATTERN =
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.0(?:-(?:(?:0|[1-9]\d*)|(?:\d*[a-z-][0-9a-z-]*))(?:\.(?:(?:0|[1-9]\d*)|(?:\d*[a-z-][0-9a-z-]*)))*)?$/i;
+
+interface ParsedReleaseVersion {
+  major: bigint;
+  minor: bigint;
+  prerelease?: string;
+}
 
 export function assertReleaseVersion(value: string): void {
-  if (!SEMVER_PATTERN.test(value)) {
+  if (!COMPATIBLE_VERSION_PATTERN.test(value)) {
     throw new Error(
-      `Release version must be SemVer without a leading "v" or build metadata: ${value}`,
+      `Release version must be ComVer X.Y.0 without a leading "v" or build metadata: ${value}`,
     );
   }
+}
+
+export function findLatestReleaseVersion(
+  versions: Iterable<string>,
+  exclude?: string,
+): string | undefined {
+  let latest: string | undefined;
+  for (const version of versions) {
+    if (version === exclude) continue;
+    try {
+      assertReleaseVersion(version);
+    } catch {
+      continue;
+    }
+    if (!latest || compareReleaseVersions(latest, version) < 0) {
+      latest = version;
+    }
+  }
+  return latest;
+}
+
+export function hasBreakingChange(commitMessages: Iterable<string>): boolean {
+  for (const message of commitMessages) {
+    if (
+      /^[a-z][a-z0-9-]*(?:\([^\r\n)]+\))?!:/m.test(message) ||
+      /^BREAKING(?: |-)CHANGE:\s*\S/im.test(message)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function assertComVerBump(
+  previous: string | undefined,
+  next: string,
+  commitMessages: Iterable<string>,
+): void {
+  assertReleaseVersion(next);
+  const nextVersion = parseReleaseVersion(next);
+  if (nextVersion.major === 0n && nextVersion.minor === 0n) {
+    throw new Error("0.0.0 is an unreleased source version, not a release.");
+  }
+
+  if (previous === undefined) {
+    assertReleaseCore(nextVersion, 1n, 0n, "The first release");
+    return;
+  }
+
+  assertReleaseVersion(previous);
+  if (compareReleaseVersions(previous, next) >= 0) {
+    throw new Error(`Release ${next} must be newer than ${previous}.`);
+  }
+
+  const previousVersion = parseReleaseVersion(previous);
+  if (
+    previousVersion.prerelease !== undefined &&
+    previousVersion.major === nextVersion.major &&
+    previousVersion.minor === nextVersion.minor
+  ) {
+    return;
+  }
+
+  const breaking = hasBreakingChange(commitMessages);
+  const expectedMajor = breaking
+    ? previousVersion.major + 1n
+    : previousVersion.major;
+  const expectedMinor = breaking ? 0n : previousVersion.minor + 1n;
+  assertReleaseCore(
+    nextVersion,
+    expectedMajor,
+    expectedMinor,
+    breaking ? "A breaking release" : "A backwards-compatible release",
+  );
+}
+
+export async function assertComVerHistory(
+  next: string,
+  ref: string,
+  gitOutput: (args: string[]) => Promise<string>,
+): Promise<void> {
+  const tags = (await gitOutput(["tag", "--merged", ref, "--list"]))
+    .split("\n")
+    .filter(Boolean);
+  const previous = findLatestReleaseVersion(tags, next);
+  const range = previous ? `${previous}..${ref}` : ref;
+  const messages = (await gitOutput(["log", "--format=%B%x00", range]))
+    .split("\0")
+    .map((message) => message.trim())
+    .filter(Boolean);
+  assertComVerBump(previous, next, messages);
 }
 
 export function compareReleaseVersions(left: string, right: string): number {
@@ -63,6 +160,30 @@ export function compareReleaseVersions(left: string, right: string): number {
     return leftIdentifier < rightIdentifier ? -1 : 1;
   }
   return 0;
+}
+
+function parseReleaseVersion(value: string): ParsedReleaseVersion {
+  assertReleaseVersion(value);
+  const [core, prerelease] = value.split("-", 2);
+  const [major, minor] = core.split(".");
+  return {
+    major: BigInt(major),
+    minor: BigInt(minor),
+    prerelease,
+  };
+}
+
+function assertReleaseCore(
+  actual: ParsedReleaseVersion,
+  expectedMajor: bigint,
+  expectedMinor: bigint,
+  label: string,
+): void {
+  if (actual.major !== expectedMajor || actual.minor !== expectedMinor) {
+    throw new Error(
+      `${label} must use ${expectedMajor}.${expectedMinor}.0, got ${actual.major}.${actual.minor}.0.`,
+    );
+  }
 }
 
 export async function assertManifestVersions(

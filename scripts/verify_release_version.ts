@@ -1,4 +1,5 @@
 import {
+  assertComVerHistory,
   assertManifestVersions,
   assertReleaseVersion,
   compareReleaseVersions,
@@ -30,6 +31,7 @@ if (
   );
 }
 
+await assertComVerHistory(tag, tag, gitOutput);
 await assertManifestVersions(tag);
 
 const tagCommit = await gitOutput([

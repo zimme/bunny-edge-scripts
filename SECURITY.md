@@ -2,8 +2,10 @@
 
 ## Supported Versions
 
-Security fixes target the latest Semantic Version that exists as a matching
-GitHub, JSR, and npm release. Source checkouts still at `0.0.0` are unreleased
+Security fixes target the latest Compatible Version that exists as a matching
+GitHub, JSR, and npm release. A backwards-compatible security fix increments the
+minor version; an incompatible security fix increments the major version. The
+patch component remains zero. Source checkouts still at `0.0.0` are unreleased
 and unsupported.
 
 ## Reporting A Vulnerability
