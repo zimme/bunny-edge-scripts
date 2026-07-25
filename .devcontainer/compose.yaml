@@ -26,6 +26,5 @@ services:
       timeout: 2s
       retries: 120
     init: true
-    user: vscode
     volumes:
       - ..:/workspaces/bunny-edge-scripts:cached

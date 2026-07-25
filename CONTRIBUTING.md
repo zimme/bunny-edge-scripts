@@ -13,7 +13,7 @@ From any host with Docker Compose:
 
 ```sh
 docker compose -f .devcontainer/compose.yaml up --build --detach --wait development
-docker compose -f .devcontainer/compose.yaml exec development deno task validate
+docker compose -f .devcontainer/compose.yaml exec --user vscode development deno task validate
 docker compose -f .devcontainer/compose.yaml down
 ```
 

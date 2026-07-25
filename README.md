@@ -98,7 +98,7 @@ optional and attaches to the same service:
 
 ```sh
 docker compose -f .devcontainer/compose.yaml up --build --detach --wait development
-docker compose -f .devcontainer/compose.yaml exec development deno task validate
+docker compose -f .devcontainer/compose.yaml exec --user vscode development deno task validate
 docker compose -f .devcontainer/compose.yaml down
 ```
 

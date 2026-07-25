@@ -4,7 +4,7 @@
 - Use the applicable Agent Skill from `.agents/skills/` for specialized work.
 - The setup workflow prepares the Compose-native `development` service. Run
   repository commands with
-  `docker compose -f .devcontainer/compose.yaml exec
+  `docker compose -f .devcontainer/compose.yaml exec --user vscode
   development <command>`
   when the agent is outside it.
 - Keep this file Copilot-specific and concise; do not duplicate `AGENTS.md`.

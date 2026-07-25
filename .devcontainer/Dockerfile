@@ -1,7 +1,7 @@
 ARG DENO_VERSION=2.9.3
 FROM denoland/deno:${DENO_VERSION}@sha256:6288db6be1c26473bb9d1843f906d9a219c0dda57fd85de4aac90296951cf6ef AS deno
 
-FROM node:24.13.1-bookworm-slim@sha256:a81a03dd965b4052269a57fac857004022b522a4bf06e7a739e25e18bce45af2 AS node
+FROM node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS node
 
 FROM mcr.microsoft.com/devcontainers/base@sha256:1a00517e89d3075f8c9dc8d9911404de0ff8991a4d71c62068573e9b016a89da
 
@@ -51,8 +51,8 @@ RUN command -v curl \
     && tar -xzf "/tmp/${copilot_archive}" -C /tmp \
     && install -m 0755 /tmp/copilot /usr/local/bin/copilot \
     && rm -rf /tmp/gh_* /tmp/copilot /tmp/copilot-* \
-    && test "$(node --version)" = "v24.13.1" \
-    && test "$(npm --version)" = "11.8.0" \
+    && test "$(node --version)" = "v24.18.0" \
+    && test "$(npm --version)" = "11.16.0" \
     && gh --version | head -n 1 | grep -q "^gh version ${GH_VERSION} " \
     && copilot --version | grep -q "${COPILOT_VERSION}"
 

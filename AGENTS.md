@@ -23,7 +23,7 @@ Docker Compose:
 
 ```sh
 docker compose -f .devcontainer/compose.yaml up --build --detach --wait development
-docker compose -f .devcontainer/compose.yaml exec development <command>
+docker compose -f .devcontainer/compose.yaml exec --user vscode development <command>
 docker compose -f .devcontainer/compose.yaml down
 ```
 
@@ -40,11 +40,13 @@ setup workflow starts the same container before the coding agent begins. CI,
 release jobs, and coding agents use the GHCR prebuild as a cache; the checked-in
 Dockerfile and Compose files remain authoritative. The Dockerfile installs every
 CLI, installs the frozen dependency graph, and prewarms the platform-specific
-bundler before source is mounted. Compose owns the runtime user, workspace
-mount, repository setup, readiness check, and GHCR `cache_from` setting. Do not
-add Dev Container Features, mutating lifecycle commands, or duplicate container
-and dependency caching in workflows. A wait-only adapter hook may synchronize
-with Compose health, but it must not install or configure anything.
+bundler before source is mounted. Compose owns host UID/GID reconciliation, the
+workspace mount, repository setup, readiness check, and GHCR `cache_from`
+setting. Repository commands run as `vscode`; startup uses root only to match
+that account to a non-root Linux bind-mount owner. Do not add Dev Container
+Features, mutating lifecycle commands, or duplicate container and dependency
+caching in workflows. A wait-only adapter hook may synchronize with Compose
+health, but it must not install or configure anything.
 
 Use root Deno tasks as the stable command interface. npm exists only for npm
 artifact validation and publication:

@@ -10,8 +10,10 @@ description: Modify or review Dev Container, Docker Compose, GitHub Actions, Bun
 2. Keep GitHub workflows thin. The Dockerfile and Compose `development` service
    must define the complete environment without Dev Container Features or
    mutating lifecycle commands. A wait-only hook may synchronize editor
-   attachment with Compose health. Run repository behavior through root Deno
-   tasks inside that service and use `CI=true` for necessary CI differences.
+   attachment with Compose health. Compose startup may reconcile the `vscode`
+   UID/GID with a non-root Linux bind-mount owner, but repository commands must
+   drop privileges first. Run repository behavior through root Deno tasks inside
+   that service and use `CI=true` for necessary CI differences.
 3. Preserve exact tool versions and immutable action, image, and Feature
    resolutions. Update readable versions and lock data together.
 4. Keep `dist/` and `examples/*/generated/` generated. Change their source and

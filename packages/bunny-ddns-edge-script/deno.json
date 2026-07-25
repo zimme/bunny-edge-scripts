@@ -6,7 +6,7 @@
   },
   "tasks": {
     "build": "deno run --allow-read --allow-write --allow-env --allow-run=deno ../../scripts/build_npm_package.ts .",
-    "build:types": "deno run --allow-read --allow-write --allow-env npm:typescript@6.0.3/tsc --allowJs --checkJs --declaration --emitDeclarationOnly --outDir dist --rootDir src src/mod.ts src/app.js --module esnext --target esnext --lib esnext,dom --skipLibCheck",
+    "build:types": "deno run --allow-read --allow-write --allow-env --allow-run npm:typescript@7.0.2/tsc --allowJs --checkJs --declaration --emitDeclarationOnly --outDir dist --rootDir src src/mod.ts src/app.js --module esnext --target esnext --lib esnext,dom --skipLibCheck",
     "check": "deno check src/app.js src/dev.js src/main.js src/mod.ts tests/app.test.ts",
     "smoke:package": "deno run --allow-read scripts/smoke_package.ts",
     "test": "deno test --allow-net=none tests"

@@ -10,7 +10,7 @@
     "conventional-changelog": "npm:conventional-changelog@8.1.0",
     "conventional-changelog-conventionalcommits": "npm:conventional-changelog-conventionalcommits@10.2.1",
     "cspell": "npm:cspell@10.0.1",
-    "typescript": "npm:typescript@6.0.3",
+    "typescript": "npm:typescript@7.0.2",
     "yaml": "npm:yaml@2.9.0"
   },
   "tasks": {
@@ -20,7 +20,7 @@
     "check": "deno task --filter @zimme/bunny-ddns-edge-script check && deno task --filter @zimme/create-bunny-ddns check && deno check scripts/*.ts && deno check examples/ddns-edge-script-repo/script.ts",
     "commits:check": "deno run -A npm:@commitlint/cli@21.2.1 --from \"$(git rev-list --max-parents=0 HEAD)\" --to HEAD --verbose",
     "devcontainer:down": "docker compose -f .devcontainer/compose.yaml down",
-    "devcontainer:exec": "docker compose -f .devcontainer/compose.yaml exec development",
+    "devcontainer:exec": "docker compose -f .devcontainer/compose.yaml exec --user vscode development",
     "devcontainer:up": "docker compose -f .devcontainer/compose.yaml up --build --detach --wait development",
     "doctor": "deno run --allow-read=.tool-versions --allow-run=node,npm,gh,copilot scripts/verify_toolchain.ts",
     "docs:check": "deno doc --lint packages/bunny-ddns-edge-script/src/mod.ts packages/create-bunny-ddns/src/mod.ts packages/create-bunny-ddns/src/provision.ts",
