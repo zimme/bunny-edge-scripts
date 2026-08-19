@@ -5,7 +5,7 @@
   ],
   "imports": {
     "@commitlint/cli": "npm:@commitlint/cli@21.2.1",
-    "@commitlint/config-conventional": "npm:@commitlint/config-conventional@21.2.0",
+    "@commitlint/config-conventional": "npm:@commitlint/config-conventional@21.2.2",
     "@zimme/bunny-ddns-edge-script": "./packages/bunny-ddns-edge-script/src/mod.ts",
     "conventional-changelog": "npm:conventional-changelog@8.1.0",
     "conventional-changelog-conventionalcommits": "npm:conventional-changelog-conventionalcommits@10.2.1",
