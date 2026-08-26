@@ -3,7 +3,7 @@
   "specifiers": {
     "npm:@commitlint/cli@21.2.1": "21.2.1_typescript@7.0.2",
     "npm:@commitlint/config-conventional@21.2.0": "21.2.0",
-    "npm:conventional-changelog-conventionalcommits@10.2.1": "10.2.1",
+    "npm:conventional-changelog-conventionalcommits@10.4.0": "10.4.0",
     "npm:conventional-changelog@8.1.0": "8.1.0",
     "npm:cspell@10.0.1": "10.0.1",
     "npm:typescript@7.0.2": "7.0.2",
@@ -163,8 +163,8 @@
         "conventional-commits-parser"
       ]
     },
-    "@conventional-changelog/template@1.2.1": {
-      "integrity": "sha512-TzlTVpKPjaqW6qOYjQcYUDuGsLCNsvFHVBXkYGTAnf5V37jCWrE5haKNXzz0WZUtVHjrpV76L1buANjwXMfT8w=="
+    "@conventional-changelog/template@1.4.0": {
+      "integrity": "sha512-aalGyl7dbB5PArRebDIX43ZvBlXrYm9uWzGJ26t+4SzJVPsOuvfILGGbw5X4yX7i50YEmJ8zvbiWnqH/AAnZqg=="
     },
     "@cspell/cspell-bundled-dicts@10.0.1": {
       "integrity": "sha512-WvkSDNX4Uyyj/ZgbPO6L38iFNMfK1EqsH1FteRiI2qLz6QZMXRFrIt12OqiWIplzZDDaVpBH9FCJOPJll0fjCQ==",
@@ -653,8 +653,8 @@
         "@conventional-changelog/template"
       ]
     },
-    "conventional-changelog-conventionalcommits@10.2.1": {
-      "integrity": "sha512-n4Kr1HFMTf3iMbES0TMxKIcYtUUv4rKqyQQp2JwfOEfFCOfGT3Tq4mCyJ8S9/YPyWhydjfKrrvnyl+gCjA+mJQ==",
+    "conventional-changelog-conventionalcommits@10.4.0": {
+      "integrity": "sha512-Rriac6ZrAlVm6cy9Bz4NSp+WMHpwNXoPIYex+HjCgduAVUSbnew29DQjQw0C4g9u3HtSYzGiGY+pdBXAZo+4aA==",
       "dependencies": [
         "@conventional-changelog/template"
       ]
@@ -1088,7 +1088,7 @@
     "dependencies": [
       "npm:@commitlint/cli@21.2.1",
       "npm:@commitlint/config-conventional@21.2.0",
-      "npm:conventional-changelog-conventionalcommits@10.2.1",
+      "npm:conventional-changelog-conventionalcommits@10.4.0",
       "npm:conventional-changelog@8.1.0",
       "npm:cspell@10.0.1",
       "npm:typescript@7.0.2",
