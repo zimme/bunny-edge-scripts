@@ -86,7 +86,10 @@ function fixture(overrides: Partial<Platform> = {}) {
     const registered = await deadline(ready.promise);
     return { socket, registered };
   }
-  async function connector(reconnect = false) {
+  async function connector(
+    reconnect = false,
+    onRegistered?: (value: Registration) => void,
+  ) {
     const ready = deferred<Registration>();
     const controller = new AbortController();
     controllers.push(controller);
@@ -96,7 +99,10 @@ function fixture(overrides: Partial<Platform> = {}) {
       allowLoopbackHttp: true,
       signal: controller.signal,
       heartbeatMs: 10,
-      onRegistered: (value) => ready.resolve(value),
+      onRegistered: (value) => {
+        ready.resolve(value);
+        onRegistered?.(value);
+      },
     });
     clients.push(client);
     return await deadline(ready.promise);
@@ -405,4 +411,21 @@ Deno.test("oversized control messages close the connector and resolve lifetime w
   socket.send("x".repeat(513));
   await deadline(closed);
   await consume(await f.probe(), 503);
+});
+
+Deno.test("healthy session rotations reset accumulated reconnect backoff", async () => {
+  await using f = fixture({ lifetimeMs: 30 });
+  const times: number[] = [];
+  const rotated = deferred<void>();
+  await f.connector(true, () => {
+    times.push(performance.now());
+    if (times.length === 4) rotated.resolve();
+  });
+  await deadline(rotated.promise);
+  for (let index = 1; index < times.length; index++) {
+    assert(
+      times[index] - times[index - 1] < 1000,
+      "Healthy rotation retained failure backoff",
+    );
+  }
 });

@@ -119,7 +119,13 @@ export async function runConnector(options: ConnectorOptions): Promise<void> {
   let retryMs = 250;
   while (!options.signal?.aborted) {
     try {
-      await connectProbe(options);
+      await connectProbe({
+        ...options,
+        onRegistered(value) {
+          retryMs = 250;
+          options.onRegistered?.(value);
+        },
+      });
     } catch { /* Retry without emitting endpoints, headers, or credentials. */ }
     if (options.signal?.aborted) return;
     await new Promise<void>((resolve) => {
