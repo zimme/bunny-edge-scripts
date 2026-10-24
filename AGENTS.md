@@ -14,6 +14,12 @@ This Deno-first monorepo is designed to publish two packages to JSR and npm:
 The runtime package executes on Bunny Edge Scripting. DDNS clients receive a
 limited shared secret; Bunny API keys remain in the Edge Script environment.
 
+The unpublished `experiments/http-ws-tunnel/` directory contains an isolated
+WebSocket rendezvous probe. Keep it outside DDNS package releases and generator
+output. Its instance-local routing is not a hosted affinity guarantee. Use
+`deno task experiment:tunnel` for its local checks; do not deploy hosted probes
+without explicit authorization.
+
 ## Execution environment
 
 Use the Docker Compose-native development container for repository work. The

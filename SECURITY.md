@@ -49,6 +49,13 @@ access requires the explicit `DDNS_ALLOW_ALL_HOSTS=true` acknowledgement.
 
 ## Operational Guidance
 
+The unpublished `experiments/http-ws-tunnel` probe uses separate connector and
+viewer credentials scoped to one exact hostname. It has no Bunny account API
+key, DNS mutation, enrollment, or origin-forwarding functionality. Credentials
+must never be shared with DDNS or Bunny Hole. The local adapter permits
+unencrypted traffic only on the explicit IPv4 loopback harness; the Bunny
+adapter requires HTTPS. See its README for limits and unresolved routing risks.
+
 - Use a long random `DDNS_SHARED_SECRET`.
 - Set `DDNS_USERNAME` unless you need username-less compatibility.
 - Prefer allow lists for shared or multi-domain Bunny accounts.
