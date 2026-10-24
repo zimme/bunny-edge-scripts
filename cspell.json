@@ -51,6 +51,7 @@
     "lockfiles",
     "prebuild",
     "preflighted",
+    "smol",
     "spoofable",
     "subrequest",
     "worktree",
