@@ -27,7 +27,8 @@
         "deno.enablePaths": [
           "packages",
           "examples",
-          "scripts"
+          "scripts",
+          "experiments"
         ],
         "editor.formatOnSave": true,
         "editor.defaultFormatter": "denoland.vscode-deno"
