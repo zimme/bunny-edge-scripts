@@ -23,6 +23,7 @@
     "badauth",
     "badagent",
     "badip",
+    "Buildx",
     "bunny",
     "checkip",
     "CodeQL",

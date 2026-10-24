@@ -36,9 +36,12 @@ jobs:
 
       - name: Validate and publish in development container
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
+        env:
+          TMPDIR: ${{ github.workspace }}/.devcontainer/.tmp
         with:
           env: |
             CI=true
+            TMPDIR=/tmp
             GH_TOKEN=${{ github.token }}
             GITHUB_REPOSITORY=${{ github.repository }}
             RELEASE_TAG=${{ github.ref_name }}
@@ -69,9 +72,12 @@ jobs:
 
       - name: Create release in development container
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
+        env:
+          TMPDIR: ${{ github.workspace }}/.devcontainer/.tmp
         with:
           env: |
             CI=true
+            TMPDIR=/tmp
             GH_TOKEN=${{ github.token }}
             RELEASE_TAG=${{ github.ref_name }}
           inheritEnv: true

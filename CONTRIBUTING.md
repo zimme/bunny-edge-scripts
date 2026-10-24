@@ -46,6 +46,21 @@ differ. A wait-only adapter hook may synchronize editor attachment with Compose
 health. Keep the Compose `cache_from` setting as the single container-cache
 source instead of adding workflow-only caches.
 
+For an optional Dev Containers CLI build or launch, place its generated build
+files inside the checkout's existing Docker build context:
+
+```sh
+TMPDIR="$PWD/.devcontainer/.tmp" devcontainer build --workspace-folder .
+TMPDIR="$PWD/.devcontainer/.tmp" devcontainer up --workspace-folder .
+```
+
+The CI adapter sets the same `TMPDIR`. Buildx enforces read access to build
+inputs; older Compose releases omit the grant for the adapter's default
+temporary Dockerfile outside the build context. Keeping that generated file
+inside the existing context avoids extra filesystem privileges. The temporary
+directory is excluded from Git, Docker context contents, and Deno checks. Plain
+Compose builds need no extra setting. Do not disable Buildx filesystem checks.
+
 Package `dist/` directories are generated from package `src/` directories and
 are gitignored. Do not edit them by hand. Change source files, run
 `deno task build` for a local package build, and rely on the package `prepack`

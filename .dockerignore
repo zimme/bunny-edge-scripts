@@ -1,4 +1,5 @@
 .git
+.devcontainer/.tmp
 .cspellcache
 .npm-cache
 .env
