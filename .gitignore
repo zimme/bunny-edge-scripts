@@ -1,4 +1,5 @@
 .DS_Store
+.devcontainer/.tmp/
 .env
 .env.*
 !.env.example

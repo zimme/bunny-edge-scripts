@@ -44,6 +44,7 @@
     "validate": "deno task doctor && deno ci && deno task commits:check && deno task ci",
     "version:set": "deno run --allow-read=package.json,packages,examples/ddns-edge-script-repo/deno.json --allow-write=package.json,packages,examples/ddns-edge-script-repo/deno.json scripts/set_version.ts"
   },
+  "exclude": [".devcontainer/.tmp"],
   "fmt": {
     "lineWidth": 80,
     "proseWrap": "always"
