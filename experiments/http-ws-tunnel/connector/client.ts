@@ -19,6 +19,8 @@ export interface ConnectorOptions {
   onRegistered?: (value: Registration) => void;
 }
 
+class ConnectorReplaced extends Error {}
+
 function validateOptions(options: ConnectorOptions): URL {
   validateToken(options.token);
   const url = new URL(options.url);
@@ -109,7 +111,14 @@ export function connectProbe(options: ConnectorOptions): Promise<void> {
     );
     socket.addEventListener(
       "close",
-      () => finish(registered ? undefined : new Error("Registration failed")),
+      (event) =>
+        finish(
+          event.code === 4001
+            ? new ConnectorReplaced("Connector superseded")
+            : registered
+            ? undefined
+            : new Error("Registration failed"),
+        ),
     );
   });
 }
@@ -126,7 +135,10 @@ export async function runConnector(options: ConnectorOptions): Promise<void> {
           options.onRegistered?.(value);
         },
       });
-    } catch { /* Retry without emitting endpoints, headers, or credentials. */ }
+    } catch (error) {
+      if (error instanceof ConnectorReplaced) return;
+      // Retry transient failures without emitting endpoints or credentials.
+    }
     if (options.signal?.aborted) return;
     await new Promise<void>((resolve) => {
       const done = () => {

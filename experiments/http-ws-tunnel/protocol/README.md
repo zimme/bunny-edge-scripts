@@ -35,6 +35,11 @@ connector for the handling gateway instance. At most one is active: a new
 registration replaces the prior connector, closes it, and fails probes pending
 on that old session.
 
+Replacement uses close code `4001`. A reconnecting connector must treat this as
+a terminal outcome and stop; it must not reclaim the session from its successor.
+Lifetime rotation uses code `4003` and permits reconnection, as do transient
+failures. Successful registration resets reconnect backoff.
+
 Immediately after registration, the server sends a UTF-8 JSON text message:
 
 ```json

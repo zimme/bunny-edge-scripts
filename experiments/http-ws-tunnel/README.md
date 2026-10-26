@@ -59,6 +59,11 @@ accepts control messages up to 512 UTF-8 bytes and guards WebSocket sends
 against a 4 KiB buffered-amount limit. Bunny's platform-specific limits for
 long-lived connections, frames, and isolate lifetime still need verification.
 
+A displaced connector stops when the gateway closes it with code `4001`, so two
+running connectors cannot repeatedly evict one another. Session rotation and
+transient disconnects reconnect with jitter; successful registration resets the
+failure backoff.
+
 Each `createProbeGateway` factory instance generates an `isolateId` and models
 one isolate in local tests. The mapping from a factory instance to a real Bunny
 runtime isolate and its lifetime is not verified. If a request reaches an

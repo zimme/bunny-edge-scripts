@@ -119,6 +119,7 @@ function fixture(overrides: Partial<Platform> = {}) {
     url,
     raw,
     connector,
+    clients,
     probe,
     async [Symbol.asyncDispose]() {
       for (const controller of controllers) controller.abort();
@@ -427,5 +428,18 @@ Deno.test("healthy session rotations reset accumulated reconnect backoff", async
       times[index] - times[index - 1] < 1000,
       "Healthy rotation retained failure backoff",
     );
+  }
+});
+
+Deno.test("a replaced reconnecting connector stops and cannot evict its successor", async () => {
+  await using f = fixture();
+  const first = await f.connector(true);
+  const second = await f.connector(true);
+  assert(first.sessionId !== second.sessionId);
+  await deadline(f.clients[0]);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const response = await f.probe();
+    assert(response.headers.get("x-probe-session-id") === second.sessionId);
+    await consume(response, 200);
   }
 });
