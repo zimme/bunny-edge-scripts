@@ -40,6 +40,10 @@ a terminal outcome and stop; it must not reclaim the session from its successor.
 Lifetime rotation uses code `4003` and permits reconnection, as do transient
 failures. Successful registration resets reconnect backoff.
 
+Session cleanup rejects pending probes immediately. Lifecycle protection via
+`waitUntil` remains active through the closing handshake and settles on the
+socket's actual `close` event, or immediately if the socket is already closed.
+
 Immediately after registration, the server sends a UTF-8 JSON text message:
 
 ```json

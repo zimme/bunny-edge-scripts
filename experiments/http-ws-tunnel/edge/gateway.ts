@@ -164,7 +164,7 @@ export function createProbeGateway(config: GatewayConfig, platform: Platform) {
             pending.finish(503, reason);
           }
           if (socket.readyState < WebSocket.CLOSING) socket.close(code, reason);
-          resolveClosed();
+          if (socket.readyState === WebSocket.CLOSED) resolveClosed();
         },
       };
       const idleTimer = setInterval(() => {
@@ -219,7 +219,10 @@ export function createProbeGateway(config: GatewayConfig, platform: Platform) {
       });
       socket.addEventListener(
         "close",
-        () => session.end(4000, "Connector disconnected"),
+        () => {
+          session.end(4000, "Connector disconnected");
+          resolveClosed();
+        },
       );
       socket.addEventListener(
         "error",

@@ -443,3 +443,61 @@ Deno.test("a replaced reconnecting connector stops and cannot evict its successo
     await consume(response, 200);
   }
 });
+
+Deno.test("lifecycle protection survives server shutdown until the socket actually closes", async () => {
+  class ClosingSocket extends EventTarget {
+    readyState: number = WebSocket.OPEN;
+    binaryType = "arraybuffer";
+    close() {
+      this.readyState = WebSocket.CLOSING;
+    }
+    finishClose() {
+      this.readyState = WebSocket.CLOSED;
+      this.dispatchEvent(new CloseEvent("close"));
+    }
+  }
+  const socket = new ClosingSocket();
+  const work: Promise<unknown>[] = [];
+  const connectorToken = crypto.randomUUID();
+  const gateway = createProbeGateway({
+    hostname: "app.example.com",
+    connectorToken,
+    viewerToken: crypto.randomUUID(),
+  }, {
+    upgrade: () => ({
+      socket: socket as unknown as WebSocket,
+      response: new Response(),
+    }),
+    waitUntil: (promise) => {
+      work.push(promise);
+    },
+  });
+  try {
+    const response = await gateway.handle(
+      new Request("https://app.example.com/__probe/connect", {
+        headers: {
+          authorization: `Bearer ${connectorToken}`,
+          upgrade: "websocket",
+          "sec-websocket-protocol": SUBPROTOCOL,
+        },
+      }),
+    );
+    await response.body?.cancel();
+    assert(work.length === 1);
+    let settled = false;
+    work[0].then(() => {
+      settled = true;
+    });
+    gateway.dispose();
+    await Promise.resolve();
+    assert(socket.readyState === WebSocket.CLOSING);
+    assert(!settled, "Closing handshake lost lifecycle protection");
+    socket.finishClose();
+    await deadline(work[0]);
+    assert(settled);
+  } finally {
+    gateway.dispose();
+    socket.finishClose();
+    await Promise.all(work);
+  }
+});
