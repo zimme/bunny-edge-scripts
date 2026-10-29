@@ -27,6 +27,15 @@ The DDNS script is not a reverse tunnel and does not provide NAT traversal. It
 is for services that are intentionally reachable through an inbound port but
 whose public IP address can change.
 
+## Experiments
+
+The unpublished [HTTP/WebSocket rendezvous probe](experiments/http-ws-tunnel)
+tests connector registration and fixed binary exchanges within one isolate. It
+is separate from DDNS and is not a deployable reverse tunnel. Reliable
+cross-isolate routing on Bunny remains unproven; local tests do not establish
+hosted feasibility. Run `deno task experiment:tunnel` inside the development
+container to check the experiment.
+
 ## DDNS Setup
 
 For the complete runtime API, configuration, deployment settings, and DDNS

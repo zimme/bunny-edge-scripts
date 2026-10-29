@@ -1,0 +1,11 @@
+{
+  "workspace": [],
+  "imports": {},
+  "lock": false,
+  "tasks": {
+    "check": "deno check protocol/*.ts edge/*.ts connector/*.ts tests/*.ts",
+    "test": "deno test --allow-net=127.0.0.1 tests/",
+    "local": "deno run --allow-net=127.0.0.1 --allow-env=TUNNEL_PROBE_HOSTNAME,TUNNEL_PROBE_CONNECTOR_TOKEN,TUNNEL_PROBE_VIEWER_TOKEN edge/local.ts",
+    "connector": "deno run --allow-net=127.0.0.1 --allow-env=TUNNEL_PROBE_CONNECTOR_TOKEN connector/main.ts"
+  }
+}
