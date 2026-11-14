@@ -16,7 +16,7 @@ without receiving the Bunny account API key.
 - Optional address-diagnostic endpoints: `GET /checkip`, `GET /nic/checkip`, and
   `GET /ip`.
 - Health endpoints: `GET /health` and `GET /healthz`.
-- HTTP Basic Auth with one or more DDNS shared secrets.
+- HTTP Basic Auth with shared secrets or individually scoped client credentials.
 - HTTPS enforcement by default.
 - Bunny DNS zone discovery and `A`/`AAAA` record updates.
 - Optional record creation.
@@ -111,24 +111,80 @@ integration keeps them out of GitHub.
 
 ### Secrets
 
-| Name                  | Required | Description                                                                                                                             |
-| --------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `BUNNY_API_KEY`       | Yes      | Bunny account API key used to discover zones and mutate records. `BUNNY_ACCESS_KEY` is accepted as an alias.                            |
-| `DDNS_SHARED_SECRET`  | Yes*     | Password sent by the DDNS client through HTTP Basic Auth. It must be 32 to 256 printable ASCII characters without whitespace or commas. |
-| `DDNS_SHARED_SECRETS` | No       | Comma-separated secrets used for rotation. When present, it replaces `DDNS_SHARED_SECRET`; each secret has the same validation rules.   |
+| Name                  | Required     | Description                                                                                                                             |
+| --------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `BUNNY_API_KEY`       | Yes          | Bunny account API key used to discover zones and mutate records. `BUNNY_ACCESS_KEY` is accepted as an alias.                            |
+| `DDNS_SHARED_SECRET`  | Legacy mode* | Password sent by the DDNS client through HTTP Basic Auth. It must be 32 to 256 printable ASCII characters without whitespace or commas. |
+| `DDNS_SHARED_SECRETS` | No           | Comma-separated secrets used for rotation. When present, it replaces `DDNS_SHARED_SECRET`; each secret has the same validation rules.   |
 
-At least one shared secret is required.
+`DDNS_CLIENTS` is required only for individual client authentication and
+replaces the two legacy shared-secret settings.
+
+Use either legacy shared-secret authentication or the optional `DDNS_CLIENTS`
+mode below. At least one shared secret is required in legacy mode.
+
+### Individual Client Credentials
+
+`DDNS_CLIENTS` is an optional **Bunny Environment Secret** containing a
+non-empty JSON array. This is a structural example only; replace the secret
+placeholder privately in your password manager or Bunny dashboard, never in this
+repository:
+
+```json
+[
+  {
+    "username": "home-router",
+    "sharedSecrets": ["<unique secret from password manager>"],
+    "allowedHosts": ["home.example.com"]
+  },
+  {
+    "username": "office-router",
+    "sharedSecrets": ["<different unique secret from password manager>"],
+    "allowedZones": ["office.example.net"],
+    "deniedHosts": ["reserved.office.example.net"]
+  }
+]
+```
+
+Each client requires a unique, case-sensitive username of 1 to 128 characters
+from `A-Z`, `a-z`, `0-9`, `.`, `_`, `@`, `+`, and `-`; a non-empty
+`sharedSecrets` string array; and at least one non-empty `allowedHosts` or
+`allowedZones` string array. Secrets use the same 32-to-256-character rules as
+legacy secrets. Optional `deniedHosts` and `deniedZones` are string arrays.
+Omitted policy arrays are empty; hostname patterns use the global rules below.
+Unknown object fields and malformed arrays are rejected to catch configuration
+mistakes.
+
+The client policy and global policy must both allow an update. Within either
+policy, hostname and zone allow lists intersect, and deny lists always win.
+Global scope remains required, even with client credentials; a client cannot
+grant itself account-wide access. `DDNS_USERNAME` is ignored in client mode.
+Clients keep using standard Basic Auth and the existing DynDNS endpoints.
+
+To migrate, remove `DDNS_SHARED_SECRET` and `DDNS_SHARED_SECRETS` from the Bunny
+configuration, including empty entries, and configure `DDNS_CLIENTS` privately
+in the Bunny dashboard. These modes are mutually exclusive; invalid or empty
+client configuration fails startup without falling back to legacy secrets. The
+generator and private provisioning command use legacy mode by default; configure
+client mode manually rather than running provisioning over it.
+
+Rotate one client by adding a new secret to its `sharedSecrets`, updating that
+client, and removing the old secret. Revoke a client by removing its object from
+the array. Changes take effect when the updated configuration is loaded;
+existing DNS records remain. To revoke every client, disable the deployment: an
+empty array is invalid. Never put client JSON containing real secrets in
+committed files, GitHub settings, logs, or agent-controlled terminals.
 
 ### Authorization
 
-| Name                   | Default      | Description                                                                                           |
-| ---------------------- | ------------ | ----------------------------------------------------------------------------------------------------- |
-| `DDNS_USERNAME`        | Any username | When set, Basic Auth must contain this exact username as well as a valid shared secret.               |
-| `DDNS_ALLOWED_HOSTS`   | Empty        | Comma-separated exact or wildcard hostname patterns, such as `home.example.com,*.home.example.net`.   |
-| `DDNS_DENIED_HOSTS`    | Empty        | Comma-separated exact or wildcard hostname patterns. A match always denies the request.               |
-| `DDNS_ALLOWED_ZONES`   | Empty        | Comma-separated exact or wildcard Bunny DNS zone patterns.                                            |
-| `DDNS_DENIED_ZONES`    | Empty        | Comma-separated zone patterns. A match always denies the request.                                     |
-| `DDNS_ALLOW_ALL_HOSTS` | `false`      | Explicit acknowledgement that the DDNS secret may update any hostname in every discovered Bunny zone. |
+| Name                   | Default      | Description                                                                                               |
+| ---------------------- | ------------ | --------------------------------------------------------------------------------------------------------- |
+| `DDNS_USERNAME`        | Any username | Legacy mode only: when set, Basic Auth must contain this exact username as well as a valid shared secret. |
+| `DDNS_ALLOWED_HOSTS`   | Empty        | Comma-separated exact or wildcard hostname patterns, such as `home.example.com,*.home.example.net`.       |
+| `DDNS_DENIED_HOSTS`    | Empty        | Comma-separated exact or wildcard hostname patterns. A match always denies the request.                   |
+| `DDNS_ALLOWED_ZONES`   | Empty        | Comma-separated exact or wildcard Bunny DNS zone patterns.                                                |
+| `DDNS_DENIED_ZONES`    | Empty        | Comma-separated zone patterns. A match always denies the request.                                         |
+| `DDNS_ALLOW_ALL_HOSTS` | `false`      | Explicit acknowledgement that the DDNS secret may update any hostname in every discovered Bunny zone.     |
 
 At least one of `DDNS_ALLOWED_HOSTS`, `DDNS_ALLOWED_ZONES`, or
 `DDNS_ALLOW_ALL_HOSTS=true` is required. Configuration otherwise fails closed.
@@ -201,6 +257,25 @@ Normal DDNS results use HTTP 200 with DynDNS-compatible text:
 Authentication failures use HTTP 401. Transport and method failures use HTTP
 errors. A multi-hostname request returns one response line per hostname.
 
+### DNS Drift And Periodic Updates
+
+Every authorized update reads the current Bunny records, even when the requested
+IP is unchanged. A later request can repair an externally edited value and, with
+`DDNS_AUTO_CREATE=true`, recreate a missing record. Existing settings are
+preserved on updates; ambiguous record sets remain subject to
+`DDNS_MULTI_RECORD_MODE`. With auto-create disabled, missing records return
+`nohost` instead.
+
+Configure your DDNS client to force an update periodically even when its public
+IP stays unchanged. Choose an interval that balances recovery time and Bunny API
+usage. There is no independent reconciliation scheduler: drift persists until
+the next client request. Intentional DNS changes may be overwritten by that
+request, so restrict scope to records owned by DDNS.
+
+A `good` or `nochg` response describes the Bunny API state observed during the
+request, not authoritative DNS propagation or service reachability. Monitor
+those independently. The basic health endpoint does not query Bunny DNS.
+
 ### Optional Address Diagnostic
 
 `/checkip`, `/nic/checkip`, and `/ip` return the first valid address found in
@@ -250,8 +325,8 @@ The stable package root exports:
 
 - `createBunnyDdnsHandler(options)`
 - `readBunnyDdnsConfigFromEnv(env)`
-- Types `RuntimeConfig`, `HandlerOptions`, `Fetcher`, `EnvReader`, and
-  `MultiRecordMode`
+- Types `RuntimeConfig`, `HandlerOptions`, `Fetcher`, `EnvReader`,
+  `MultiRecordMode`, and `DdnsClientConfig`
 
 Internal helpers are not part of the public package contract.
 

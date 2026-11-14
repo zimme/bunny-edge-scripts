@@ -18,8 +18,11 @@ issue.
 
 The intended deployment keeps the Bunny account API key inside Bunny Edge
 Scripting as a secret. DDNS clients receive only a separate DDNS secret. A
-client that knows the DDNS secret can request updates for any hostname allowed
-by the script configuration.
+client that knows a legacy DDNS secret can request updates for any hostname
+allowed by the script configuration. Optional `DDNS_CLIENTS` mode assigns each
+client its own Basic Auth username, secrets, and explicit hostname or zone allow
+lists. Requests must pass both the global and client policy. A client allow list
+cannot override a global deny rule or broaden the global scope.
 
 ### Agent-Assisted Setup
 
@@ -47,6 +50,24 @@ the requested hostname and its selected Bunny zone must both match; the lists
 form an intersection. Deny rules always win. With no allow list, account-wide
 access requires the explicit `DDNS_ALLOW_ALL_HOSTS=true` acknowledgement.
 
+### Individual Client Credentials
+
+Store `DDNS_CLIENTS` only as a Bunny Environment Secret: its JSON contains
+authentication secrets. Configure it in a user-controlled Bunny dashboard; never
+place it in repository files, GitHub variables, logs, or an agent-controlled
+terminal. It replaces legacy authentication and cannot coexist with
+`DDNS_SHARED_SECRET` or `DDNS_SHARED_SECRETS`, even when either legacy variable
+is empty. `DDNS_USERNAME` applies only to legacy authentication.
+
+Give each client a distinct username and independent random secret. Multiple
+`sharedSecrets` within one client support rotation; removing that client or its
+old secret revokes the affected credentials when the new configuration takes
+effect. Revocation does not delete DNS records or disconnect existing
+connections to the published service. Removing the final client leaves an
+invalid configuration; disable the deployment to revoke all clients. Empty or
+malformed client configuration fails closed without falling back to legacy
+authentication.
+
 ## Operational Guidance
 
 The unpublished `experiments/http-ws-tunnel` probe uses separate connector and
@@ -60,11 +81,20 @@ adapter requires HTTPS. See its README for limits and unresolved routing risks.
 - Set `DDNS_USERNAME` unless you need username-less compatibility.
 - Prefer allow lists for shared or multi-domain Bunny accounts.
 - Keep `DDNS_ALLOW_INSECURE_HTTP=false` in Bunny.
-- Rotate secrets with `DDNS_SHARED_SECRETS=old,new`, update clients, then remove
-  the old secret.
+- In legacy mode, rotate secrets with `DDNS_SHARED_SECRETS=old,new`, update
+  clients, then remove the old secret. In client mode, rotate only that client
+  through its `sharedSecrets` array in Bunny Environment Secrets.
 - Require clients to send `myip`, `ip`, or `myip6`. Treat `/checkip` as an
   optional diagnostic and configure a client to use it only after verifying the
   returned address on the deployed script; Bunny does not document a guaranteed
   sanitized client-address header for this purpose.
 - Leave `DDNS_MULTI_RECORD_MODE=reject` unless the hostname is intentionally a
   DDNS-managed record set.
+- Configure periodic forced client updates even if the IP stays unchanged. Each
+  update reads Bunny DNS and reconciles record values; no scheduler runs when
+  clients stop sending requests. Intentional DNS changes can be overwritten by a
+  later authorized update. Use `DDNS_AUTO_CREATE=false` when deletion should not
+  result in recreation.
+- Monitor DNS correctness and service reachability separately from the basic
+  health endpoint. Successful DDNS responses describe the provider API result,
+  not authoritative DNS propagation or application availability.

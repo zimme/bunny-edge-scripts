@@ -61,10 +61,29 @@ const DEFAULT_MANAGED_COMMENT = "Managed by bunny-ddns-edge-script";
  */
 
 /**
+ * @typedef {object} HostnamePolicy
+ * @property {string[]} allowedHosts
+ * @property {string[]} deniedHosts
+ * @property {string[]} allowedZones
+ * @property {string[]} deniedZones
+ */
+
+/**
+ * @typedef {object} DdnsClientConfig
+ * @property {string} username
+ * @property {string[]} sharedSecrets
+ * @property {string[]} allowedHosts
+ * @property {string[]} deniedHosts
+ * @property {string[]} allowedZones
+ * @property {string[]} deniedZones
+ */
+
+/**
  * @typedef {object} RuntimeConfig
  * @property {string} apiBaseUrl
  * @property {string} bunnyApiKey
  * @property {string[]} sharedSecrets
+ * @property {DdnsClientConfig[]} [clients]
  * @property {string} [username]
  * @property {string[]} allowedHosts
  * @property {string[]} deniedHosts
@@ -183,12 +202,18 @@ export function readConfigFromEnv(env) {
 
   const pluralSecrets = env.get("DDNS_SHARED_SECRETS");
   const singularSecret = env.get("DDNS_SHARED_SECRET");
+  const rawClients = env.get("DDNS_CLIENTS");
+  if (
+    rawClients !== undefined &&
+    (pluralSecrets !== undefined || singularSecret !== undefined)
+  ) {
+    throw new Error(
+      "DDNS_CLIENTS cannot be combined with legacy DDNS secret variables.",
+    );
+  }
   const sharedSecrets = pluralSecrets === undefined
     ? (singularSecret === undefined ? [] : [singularSecret])
     : parseSharedSecretList(pluralSecrets);
-  if (sharedSecrets.length === 0) {
-    throw new Error("Missing required DDNS_SHARED_SECRET secret.");
-  }
 
   const allowInsecureHttp = parseBoolean(
     env.get("DDNS_ALLOW_INSECURE_HTTP"),
@@ -202,6 +227,7 @@ export function readConfigFromEnv(env) {
     ),
     bunnyApiKey,
     sharedSecrets,
+    clients: rawClients === undefined ? undefined : parseClients(rawClients),
     username: emptyToUndefined(env.get("DDNS_USERNAME")),
     allowedHosts: parseList(env.get("DDNS_ALLOWED_HOSTS")),
     deniedHosts: parseList(env.get("DDNS_DENIED_HOSTS")),
@@ -245,6 +271,9 @@ function normalizeRuntimeConfig(config) {
   const normalized = {
     ...config,
     sharedSecrets: [...config.sharedSecrets],
+    clients: config.clients === undefined
+      ? undefined
+      : normalizeClients(config.clients),
     allowedHosts: normalizePatterns(config.allowedHosts, "allowedHosts"),
     deniedHosts: normalizePatterns(config.deniedHosts, "deniedHosts"),
     allowedZones: normalizePatterns(config.allowedZones, "allowedZones"),
@@ -260,8 +289,16 @@ function normalizeRuntimeConfig(config) {
  */
 function validateRuntimeConfig(config) {
   parseApiBaseUrl(config.apiBaseUrl, config.allowInsecureHttp);
-  if (!config.bunnyApiKey || config.sharedSecrets.length === 0) {
-    throw new Error("Bunny API and DDNS shared secrets are required.");
+  if (
+    !config.bunnyApiKey ||
+    (!config.clients && config.sharedSecrets.length === 0)
+  ) {
+    throw new Error("Bunny API and DDNS credentials are required.");
+  }
+  if (config.clients && config.sharedSecrets.length > 0) {
+    throw new Error(
+      "Client credentials cannot be combined with legacy shared secrets.",
+    );
   }
   for (const secret of config.sharedSecrets) {
     validateSharedSecret(secret);
@@ -347,7 +384,7 @@ export function classifyIpAddress(ip) {
 /**
  * @param {string} hostname
  * @param {BunnyDnsZone} zone
- * @param {RuntimeConfig} config
+ * @param {HostnamePolicy} config
  * @returns {boolean}
  */
 export function isHostnameAllowed(hostname, zone, config) {
@@ -700,7 +737,8 @@ async function routeRequest(request, config, client) {
     return ddnsResponse([{ code: "badauth" }]);
   }
 
-  if (!isAuthorized(request, config)) {
+  const policy = authorizationPolicy(request, config);
+  if (!policy) {
     return ddnsResponse([{ code: "badauth" }]);
   }
 
@@ -724,7 +762,10 @@ async function routeRequest(request, config, client) {
   const selectedZones = new Map();
   for (const hostname of hostnames.values) {
     const zone = findBestZone(hostname, zoneCandidates);
-    if (zone && isHostnameAllowed(hostname, zone, config)) {
+    if (
+      zone && isHostnameAllowed(hostname, zone, config) &&
+      isHostnameAllowed(hostname, zone, policy)
+    ) {
       selectedZones.set(zone.Id, zone);
     }
   }
@@ -738,7 +779,13 @@ async function routeRequest(request, config, client) {
   }
 
   const plans = hostnames.values.map((hostname) =>
-    planHostnameUpdate(hostname, addresses.values, zoneCandidates, config)
+    planHostnameUpdate(
+      hostname,
+      addresses.values,
+      zoneCandidates,
+      config,
+      policy,
+    )
   );
   const mutationCount = plans.reduce(
     (total, plan) =>
@@ -798,15 +845,19 @@ function countMutations(plan) {
  * @param {RequestedAddress[]} addresses
  * @param {ZoneCandidate[]} zones
  * @param {RuntimeConfig} config
+ * @param {HostnamePolicy} policy
  * @returns {PlannedHostnameUpdate}
  */
-function planHostnameUpdate(hostname, addresses, zones, config) {
+function planHostnameUpdate(hostname, addresses, zones, config, policy) {
   const zone = findBestZone(hostname, zones);
   if (!zone) {
     return { kind: "error", line: { code: "nohost" } };
   }
 
-  if (!isHostnameAllowed(hostname, zone, config)) {
+  if (
+    !isHostnameAllowed(hostname, zone, config) ||
+    !isHostnameAllowed(hostname, zone, policy)
+  ) {
     return { kind: "error", line: { code: "!yours" } };
   }
 
@@ -1089,24 +1140,37 @@ function assertBunnyResponse(response, operation) {
 /**
  * @param {Request} request
  * @param {RuntimeConfig} config
- * @returns {boolean}
+ * @returns {HostnamePolicy | undefined}
  */
-function isAuthorized(request, config) {
+function authorizationPolicy(request, config) {
   const credentials = parseBasicAuth(request.headers.get("Authorization"));
   if (!credentials) {
-    return false;
+    return undefined;
+  }
+
+  if (config.clients) {
+    const client = config.clients.find((candidate) =>
+      constantTimeEqual(credentials.username, candidate.username)
+    );
+    return client?.sharedSecrets.some((secret) =>
+        constantTimeEqual(credentials.password, secret)
+      )
+      ? client
+      : undefined;
   }
 
   if (
     config.username &&
     !constantTimeEqual(credentials.username, config.username)
   ) {
-    return false;
+    return undefined;
   }
 
   return config.sharedSecrets.some((secret) =>
-    constantTimeEqual(credentials.password, secret)
-  );
+      constantTimeEqual(credentials.password, secret)
+    )
+    ? config
+    : undefined;
 }
 
 /**
@@ -1383,7 +1447,7 @@ function matchesPattern(value, pattern) {
 }
 
 /**
- * @param {string[]} patterns
+ * @param {unknown} patterns
  * @param {string} name
  * @returns {string[]}
  */
@@ -1544,4 +1608,90 @@ function parseMultiRecordMode(value) {
     return "update-all";
   }
   throw new Error(`Invalid DDNS_MULTI_RECORD_MODE: ${value}`);
+}
+
+/** @param {string} value @returns {DdnsClientConfig[]} */
+function parseClients(value) {
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    // JSON parser errors can include the secret-bearing input.
+    throw new Error("DDNS_CLIENTS must contain a valid JSON array.");
+  }
+  return normalizeClients(parsed);
+}
+
+/** @param {unknown} value @returns {DdnsClientConfig[]} */
+function normalizeClients(value) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("DDNS_CLIENTS must contain at least one scoped client.");
+  }
+  const names = new Set();
+  return Array.from(value, (entry) => {
+    const fields = [
+      "username",
+      "sharedSecrets",
+      "allowedHosts",
+      "deniedHosts",
+      "allowedZones",
+      "deniedZones",
+    ];
+    if (
+      !entry || typeof entry !== "object" || Array.isArray(entry) ||
+      Object.keys(entry).some((key) => !fields.includes(key))
+    ) {
+      throw new Error(
+        "DDNS_CLIENTS contains an invalid client or unknown field.",
+      );
+    }
+    const client = /** @type {Record<string, unknown>} */ (entry);
+    if (
+      typeof client.username !== "string" ||
+      !/^[A-Za-z0-9._@+-]{1,128}$/.test(client.username) ||
+      names.has(client.username)
+    ) {
+      throw new Error(
+        "DDNS_CLIENTS requires unique Basic Auth-safe usernames.",
+      );
+    }
+    names.add(client.username);
+    if (
+      !Array.isArray(client.sharedSecrets) || client.sharedSecrets.length === 0
+    ) {
+      throw new Error("Each DDNS client requires at least one shared secret.");
+    }
+    for (const secret of client.sharedSecrets) {
+      validateSharedSecret(secret);
+    }
+    const normalized = {
+      username: client.username,
+      sharedSecrets: [...client.sharedSecrets],
+      allowedHosts: normalizePatterns(
+        client.allowedHosts === undefined ? [] : client.allowedHosts,
+        "client allowedHosts",
+      ),
+      deniedHosts: normalizePatterns(
+        client.deniedHosts === undefined ? [] : client.deniedHosts,
+        "client deniedHosts",
+      ),
+      allowedZones: normalizePatterns(
+        client.allowedZones === undefined ? [] : client.allowedZones,
+        "client allowedZones",
+      ),
+      deniedZones: normalizePatterns(
+        client.deniedZones === undefined ? [] : client.deniedZones,
+        "client deniedZones",
+      ),
+    };
+    if (
+      normalized.allowedHosts.length === 0 &&
+      normalized.allowedZones.length === 0
+    ) {
+      throw new Error(
+        "Each DDNS client requires a hostname or zone allow list.",
+      );
+    }
+    return normalized;
+  });
 }
