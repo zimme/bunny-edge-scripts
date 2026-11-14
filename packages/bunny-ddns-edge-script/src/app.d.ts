@@ -142,7 +142,7 @@ export function classifyIpAddress(ip: string): RequestedAddress | undefined;
 export function isHostnameAllowed(
   hostname: string,
   zone: BunnyDnsZone,
-  config: RuntimeConfig,
+  config: HostnamePolicy,
 ): boolean;
 export const DNS_RECORD_TYPE_A: 0;
 export const DNS_RECORD_TYPE_AAAA: 1;
@@ -315,6 +315,7 @@ export type RuntimeConfig = {
   apiBaseUrl: string;
   bunnyApiKey: string;
   sharedSecrets: string[];
+  clients?: DdnsClientConfig[] | undefined;
   username?: string | undefined;
   allowedHosts: string[];
   deniedHosts: string[];
@@ -409,4 +410,21 @@ export type PlannedHostnameUpdate = {
 export type ZoneCandidate = {
   zone: BunnyDnsZone;
   domain: string;
+};
+
+/** Hostname and zone rules, evaluated as intersecting allow lists with deny precedence. */
+export type HostnamePolicy = {
+  allowedHosts: string[];
+  deniedHosts: string[];
+  allowedZones: string[];
+  deniedZones: string[];
+};
+/** Basic Auth identity and additional scope for one DDNS client. */
+export type DdnsClientConfig = {
+  username: string;
+  sharedSecrets: string[];
+  allowedHosts: string[];
+  deniedHosts: string[];
+  allowedZones: string[];
+  deniedZones: string[];
 };

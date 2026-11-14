@@ -53,6 +53,13 @@ Add these as Bunny Environment Secrets:
 
 Add `DDNS_USERNAME` when a fixed Basic Auth username is desired.
 
+For individual client credentials, manually configure `DDNS_CLIENTS` as a Bunny
+Environment Secret instead of `DDNS_SHARED_SECRET` or `DDNS_SHARED_SECRETS`.
+Remove both legacy settings, including empty entries. Each client needs its own
+explicit scope in addition to the global scope below. Follow the
+[runtime client configuration guide](../../packages/bunny-ddns-edge-script#individual-client-credentials);
+never commit the secret JSON or pass it through an AI terminal.
+
 Authorization must include at least one of:
 
 - `DDNS_ALLOWED_HOSTS=<comma-separated-host-patterns>`
@@ -95,6 +102,11 @@ Replace `ddns.example.com` with the deployed Edge Script hostname and
 The runtime provides optional `/checkip` endpoints, but Bunny does not document
 a guaranteed sanitized client-address header for them. Configure inadyn to use
 one only after verifying that it returns the correct address on your deployment.
+
+Configure the client to send periodic forced updates when the IP is unchanged.
+Each update rechecks Bunny records and can repair DNS drift; no background
+reconciliation occurs without client requests. `/health` does not establish DNS
+correctness or application reachability.
 
 ## Manual Deployment
 

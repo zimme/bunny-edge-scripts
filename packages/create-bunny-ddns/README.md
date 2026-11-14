@@ -135,6 +135,24 @@ and `DEPLOY_KEY` as **environment secrets** there. They are deployment
 credentials, not runtime credentials. `BUNNY_API_KEY` and `DDNS_SHARED_SECRET`
 must still exist only in Bunny Environment Secrets.
 
+## Individual Client Credentials And DNS Drift
+
+Generated repositories default to legacy shared-secret authentication. For
+individually scoped clients, configure `DDNS_CLIENTS` manually as a Bunny
+Environment Secret and remove `DDNS_SHARED_SECRET` and `DDNS_SHARED_SECRETS`,
+including empty entries. Keep the global scope from `.env.example`; each client
+also needs its own allow list, and global deny rules still win. `DDNS_USERNAME`
+applies only in legacy mode. See the
+[runtime configuration guide](../bunny-ddns-edge-script#individual-client-credentials)
+for the JSON schema, rotation, and revocation. The private provisioning command
+configures legacy authentication; do not run it over a client-mode deployment.
+Never save real client JSON in the generated repository or an agent terminal.
+
+Configure DDNS clients to force periodic updates even if their IP is unchanged.
+Each request rereads Bunny DNS to reconcile external changes; the runtime has no
+independent reconciliation scheduler. Basic health checks do not establish DNS
+correctness or application reachability.
+
 ## Private Credential Boundary
 
 The safest setup is direct credential entry in Bunny's dashboard using a

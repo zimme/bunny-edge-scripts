@@ -190,6 +190,10 @@ BUNNY_API_KEY=
 # Use 32-256 printable ASCII characters without whitespace or commas.
 DDNS_SHARED_SECRET=
 
+# Advanced: configure DDNS_CLIENTS only as a private Bunny Environment Secret.
+# Remove both legacy DDNS_SHARED_SECRET(S) settings in client mode.
+# See the runtime README; never save client JSON in this repository.
+
 # Optional but recommended.
 DDNS_USERNAME=${options.ddnsUsername}
 DDNS_ALLOWED_HOSTS=${options.allowedHosts}
@@ -273,6 +277,19 @@ The generated configuration fails closed when no allow-list was supplied.
 Add \`DDNS_ALLOWED_HOSTS\` or \`DDNS_ALLOWED_ZONES\`, or regenerate with
 \`--allow-all-hosts\` only when account-wide authority is intentional.
 
+## Individual Client Credentials
+
+This scaffold defaults to legacy shared-secret authentication. To use
+individually scoped credentials, configure \`DDNS_CLIENTS\` privately as a
+Bunny Environment Secret and remove \`DDNS_SHARED_SECRET\` and
+\`DDNS_SHARED_SECRETS\`, including empty entries. Keep the global scope
+above; each client also requires an explicit allow list. \`DDNS_USERNAME\`
+applies only to legacy mode. Follow the
+[runtime configuration guide](https://github.com/zimme/bunny-edge-scripts/tree/main/packages/bunny-ddns-edge-script#individual-client-credentials)
+for schema, rotation, and revocation. Never save secret JSON in this repository
+or an agent-controlled terminal. The optional provisioning command configures
+legacy mode; do not run it over a client-mode deployment.
+
 ## Credential-Safe Provisioning
 
 The safest setup is to create the Standalone Edge Script and enter both secrets
@@ -302,7 +319,10 @@ Replace \`edge-script.example.net\` with the deployed Edge Script hostname and
 \`home.example.com\` with the DNS record you authorized. Inadyn supplies
 \`%i\` from its normal public-address detection; do not point its check-IP
 configuration at the Edge Script unless you have independently verified that
-your Bunny deployment exposes a trusted client-address header.
+your Bunny deployment exposes a trusted client-address header. Configure
+periodic forced updates even when the IP is unchanged: each request rechecks
+Bunny DNS and can repair drift, while no reconciliation runs without requests.
+The health endpoint does not verify DNS correctness or service reachability.
 
 \`\`\`conf
 custom bunny-ddns-edge-script {
