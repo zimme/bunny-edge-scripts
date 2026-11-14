@@ -53,7 +53,7 @@ npm init @zimme/bunny-ddns [directory] -- [options]
 | `--deploy <mode>`        | `bunny-git`                 | `bunny-git` or `github-action`.                                                         |
 | `--registry <registry>`  | `jsr`                       | Use `jsr` or `npm` imports in the generated project.                                    |
 | `--version <range>`      | Current package version     | Runtime and provisioning range. Release preparation updates this default automatically. |
-| `--username <name>`      | `inadyn`                    | Basic Auth username required by the generated configuration.                            |
+| `--username <name>`      | `inadyn`                    | Basic Auth username of the initial client.                                              |
 | `--allowed-hosts <list>` | Empty                       | Initial comma-separated `DDNS_ALLOWED_HOSTS`.                                           |
 | `--allowed-zones <list>` | Empty                       | Initial comma-separated `DDNS_ALLOWED_ZONES`.                                           |
 | `--allow-all-hosts`      | Off                         | Explicitly grant account-wide hostname access instead of using an allow list.           |
@@ -120,8 +120,9 @@ connect it through Bunny's Git integration:
 | Build command   | `deno task build`       |
 | Entry file      | `generated/script.ts`   |
 
-Add `BUNNY_API_KEY` and `DDNS_SHARED_SECRET` as Bunny Environment Secrets. Add
-the non-secret username and exact scope values from `.env.example` as Bunny
+Add `BUNNY_API_KEY` and `DDNS_CLIENTS` as Bunny Environment Secrets. The client
+JSON must use the initial client username and selected scope from the generated
+README. Add the exact global scope values from `.env.example` as Bunny
 Environment Variables. This must include either an allow list or the explicit
 `DDNS_ALLOW_ALL_HOSTS=true` acknowledgement.
 
@@ -132,21 +133,24 @@ builds the same artifact and uploads it with Bunny's deployment action.
 
 Create a protected GitHub environment named `production` and store `SCRIPT_ID`
 and `DEPLOY_KEY` as **environment secrets** there. They are deployment
-credentials, not runtime credentials. `BUNNY_API_KEY` and `DDNS_SHARED_SECRET`
-must still exist only in Bunny Environment Secrets.
+credentials, not runtime credentials. `BUNNY_API_KEY` and `DDNS_CLIENTS` must
+still exist only in Bunny Environment Secrets.
 
 ## Individual Client Credentials And DNS Drift
 
-Generated repositories default to legacy shared-secret authentication. For
-individually scoped clients, configure `DDNS_CLIENTS` manually as a Bunny
-Environment Secret and remove `DDNS_SHARED_SECRET` and `DDNS_SHARED_SECRETS`,
-including empty entries. Keep the global scope from `.env.example`; each client
-also needs its own allow list, and global deny rules still win. `DDNS_USERNAME`
-applies only in legacy mode. See the
+Generated repositories use individually scoped client credentials. The private
+provisioning command constructs the initial `DDNS_CLIENTS` secret from the
+chosen `--username`, selected hostname or zone scope, and the client secret
+entered privately by the user. For dashboard setup, create that JSON privately
+using the same values. `--allow-all-hosts` explicitly acknowledges account-wide
+scope in both the client policy and global configuration.
+
+Keep the global scope from `.env.example`; global and client policies must both
+allow an update, and deny rules always win. See the
 [runtime configuration guide](../bunny-ddns-edge-script#individual-client-credentials)
-for the JSON schema, rotation, and revocation. The private provisioning command
-configures legacy authentication; do not run it over a client-mode deployment.
-Never save real client JSON in the generated repository or an agent terminal.
+for the JSON schema, rotation, and revocation. Never save real client JSON in
+the generated repository or an agent terminal. The old `DDNS_SHARED_SECRET`,
+`DDNS_SHARED_SECRETS`, and `DDNS_USERNAME` settings are unsupported.
 
 Configure DDNS clients to force periodic updates even if their IP is unchanged.
 Each request rereads Bunny DNS to reconcile external changes; the runtime has no
@@ -171,10 +175,11 @@ only by the user:
 6. After the command exits, return only its marked `SAFE AI HANDOFF` block to an
    agent.
 
-The command requires an explicit private-terminal acknowledgement. It does not
-print or save credentials. Hidden input prevents terminal echo, but it cannot
-isolate secrets from an AI product that controls the terminal. An AI agent must
-never invoke the command, type into it, or wait on its prompts.
+The command requires an explicit private-terminal acknowledgement. It constructs
+the client JSON privately and does not print or save credentials. Hidden input
+prevents terminal echo, but it cannot isolate secrets from an AI product that
+controls the terminal. An AI agent must never invoke the command, type into it,
+or wait on its prompts.
 
 ## AI Agent Setup
 

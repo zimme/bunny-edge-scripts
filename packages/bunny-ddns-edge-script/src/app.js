@@ -72,6 +72,7 @@ const DEFAULT_MANAGED_COMMENT = "Managed by bunny-ddns-edge-script";
  * @typedef {object} DdnsClientConfig
  * @property {string} username
  * @property {string[]} sharedSecrets
+ * @property {boolean} [allowAllHosts]
  * @property {string[]} allowedHosts
  * @property {string[]} deniedHosts
  * @property {string[]} allowedZones
@@ -82,9 +83,7 @@ const DEFAULT_MANAGED_COMMENT = "Managed by bunny-ddns-edge-script";
  * @typedef {object} RuntimeConfig
  * @property {string} apiBaseUrl
  * @property {string} bunnyApiKey
- * @property {string[]} sharedSecrets
- * @property {DdnsClientConfig[]} [clients]
- * @property {string} [username]
+ * @property {DdnsClientConfig[]} clients
  * @property {string[]} allowedHosts
  * @property {string[]} deniedHosts
  * @property {string[]} allowedZones
@@ -200,20 +199,19 @@ export function readConfigFromEnv(env) {
     throw new Error("Missing required BUNNY_API_KEY secret.");
   }
 
-  const pluralSecrets = env.get("DDNS_SHARED_SECRETS");
-  const singularSecret = env.get("DDNS_SHARED_SECRET");
-  const rawClients = env.get("DDNS_CLIENTS");
   if (
-    rawClients !== undefined &&
-    (pluralSecrets !== undefined || singularSecret !== undefined)
+    ["DDNS_SHARED_SECRET", "DDNS_SHARED_SECRETS", "DDNS_USERNAME"].some((
+      name,
+    ) => env.get(name) !== undefined)
   ) {
     throw new Error(
-      "DDNS_CLIENTS cannot be combined with legacy DDNS secret variables.",
+      "Configure named client credentials in DDNS_CLIENTS; legacy DDNS authentication settings are not supported.",
     );
   }
-  const sharedSecrets = pluralSecrets === undefined
-    ? (singularSecret === undefined ? [] : [singularSecret])
-    : parseSharedSecretList(pluralSecrets);
+  const rawClients = env.get("DDNS_CLIENTS");
+  if (rawClients === undefined) {
+    throw new Error("Missing required DDNS_CLIENTS secret.");
+  }
 
   const allowInsecureHttp = parseBoolean(
     env.get("DDNS_ALLOW_INSECURE_HTTP"),
@@ -226,9 +224,7 @@ export function readConfigFromEnv(env) {
       allowInsecureHttp,
     ),
     bunnyApiKey,
-    sharedSecrets,
-    clients: rawClients === undefined ? undefined : parseClients(rawClients),
-    username: emptyToUndefined(env.get("DDNS_USERNAME")),
+    clients: parseClients(rawClients),
     allowedHosts: parseList(env.get("DDNS_ALLOWED_HOSTS")),
     deniedHosts: parseList(env.get("DDNS_DENIED_HOSTS")),
     allowedZones: parseList(env.get("DDNS_ALLOWED_ZONES")),
@@ -268,12 +264,14 @@ export const readBunnyDdnsConfigFromEnv = readConfigFromEnv;
  * @returns {RuntimeConfig}
  */
 function normalizeRuntimeConfig(config) {
+  if ("sharedSecrets" in config || "username" in config) {
+    throw new Error(
+      "Configure named client credentials in clients; legacy authentication fields are not supported.",
+    );
+  }
   const normalized = {
     ...config,
-    sharedSecrets: [...config.sharedSecrets],
-    clients: config.clients === undefined
-      ? undefined
-      : normalizeClients(config.clients),
+    clients: normalizeClients(config.clients),
     allowedHosts: normalizePatterns(config.allowedHosts, "allowedHosts"),
     deniedHosts: normalizePatterns(config.deniedHosts, "deniedHosts"),
     allowedZones: normalizePatterns(config.allowedZones, "allowedZones"),
@@ -289,19 +287,8 @@ function normalizeRuntimeConfig(config) {
  */
 function validateRuntimeConfig(config) {
   parseApiBaseUrl(config.apiBaseUrl, config.allowInsecureHttp);
-  if (
-    !config.bunnyApiKey ||
-    (!config.clients && config.sharedSecrets.length === 0)
-  ) {
-    throw new Error("Bunny API and DDNS credentials are required.");
-  }
-  if (config.clients && config.sharedSecrets.length > 0) {
-    throw new Error(
-      "Client credentials cannot be combined with legacy shared secrets.",
-    );
-  }
-  for (const secret of config.sharedSecrets) {
-    validateSharedSecret(secret);
+  if (!config.bunnyApiKey) {
+    throw new Error("A Bunny API key is required.");
   }
   if (
     !config.allowAllHosts && config.allowedHosts.length === 0 &&
@@ -1148,28 +1135,13 @@ function authorizationPolicy(request, config) {
     return undefined;
   }
 
-  if (config.clients) {
-    const client = config.clients.find((candidate) =>
-      constantTimeEqual(credentials.username, candidate.username)
-    );
-    return client?.sharedSecrets.some((secret) =>
-        constantTimeEqual(credentials.password, secret)
-      )
-      ? client
-      : undefined;
-  }
-
-  if (
-    config.username &&
-    !constantTimeEqual(credentials.username, config.username)
-  ) {
-    return undefined;
-  }
-
-  return config.sharedSecrets.some((secret) =>
+  const client = config.clients.find((candidate) =>
+    constantTimeEqual(credentials.username, candidate.username)
+  );
+  return client?.sharedSecrets.some((secret) =>
       constantTimeEqual(credentials.password, secret)
     )
-    ? config
+    ? client
     : undefined;
 }
 
@@ -1493,17 +1465,6 @@ function validateSharedSecret(secret) {
 }
 
 /**
- * @param {string} value
- * @returns {string[]}
- */
-function parseSharedSecretList(value) {
-  if (value === "") {
-    return [];
-  }
-  return value.split(",");
-}
-
-/**
  * @param {string | undefined} value
  * @returns {string[]}
  */
@@ -1512,18 +1473,6 @@ function parseList(value) {
     .split(/[,\n]/)
     .map((item) => item.trim())
     .filter(Boolean);
-}
-
-/**
- * @param {string | undefined} value
- * @returns {string | undefined}
- */
-function emptyToUndefined(value) {
-  if (!value || value.trim() === "") {
-    return undefined;
-  }
-
-  return value;
 }
 
 /**
@@ -1632,6 +1581,7 @@ function normalizeClients(value) {
     const fields = [
       "username",
       "sharedSecrets",
+      "allowAllHosts",
       "allowedHosts",
       "deniedHosts",
       "allowedZones",
@@ -1664,8 +1614,15 @@ function normalizeClients(value) {
     for (const secret of client.sharedSecrets) {
       validateSharedSecret(secret);
     }
+    if (
+      client.allowAllHosts !== undefined &&
+      typeof client.allowAllHosts !== "boolean"
+    ) {
+      throw new Error("Client allowAllHosts must be a boolean when provided.");
+    }
     const normalized = {
       username: client.username,
+      allowAllHosts: client.allowAllHosts === true,
       sharedSecrets: [...client.sharedSecrets],
       allowedHosts: normalizePatterns(
         client.allowedHosts === undefined ? [] : client.allowedHosts,
@@ -1685,11 +1642,19 @@ function normalizeClients(value) {
       ),
     };
     if (
-      normalized.allowedHosts.length === 0 &&
+      !normalized.allowAllHosts && normalized.allowedHosts.length === 0 &&
       normalized.allowedZones.length === 0
     ) {
       throw new Error(
-        "Each DDNS client requires a hostname or zone allow list.",
+        "Each DDNS client requires a hostname or zone allow list, or explicit allowAllHosts=true.",
+      );
+    }
+    if (
+      normalized.allowAllHosts &&
+      (normalized.allowedHosts.length > 0 || normalized.allowedZones.length > 0)
+    ) {
+      throw new Error(
+        "Client allowAllHosts=true cannot be combined with hostname or zone allow lists.",
       );
     }
     return normalized;

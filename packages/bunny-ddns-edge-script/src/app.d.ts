@@ -43,8 +43,7 @@
  * @typedef {object} RuntimeConfig
  * @property {string} apiBaseUrl
  * @property {string} bunnyApiKey
- * @property {string[]} sharedSecrets
- * @property {string} [username]
+ * @property {DdnsClientConfig[]} clients
  * @property {string[]} allowedHosts
  * @property {string[]} deniedHosts
  * @property {string[]} allowedZones
@@ -191,8 +190,7 @@ export const DNS_RECORD_TYPE_AAAA: 1;
  * @typedef {object} RuntimeConfig
  * @property {string} apiBaseUrl
  * @property {string} bunnyApiKey
- * @property {string[]} sharedSecrets
- * @property {string} [username]
+ * @property {DdnsClientConfig[]} clients
  * @property {string[]} allowedHosts
  * @property {string[]} deniedHosts
  * @property {string[]} allowedZones
@@ -314,9 +312,7 @@ export type MultiRecordMode = "reject" | "update-all";
 export type RuntimeConfig = {
   apiBaseUrl: string;
   bunnyApiKey: string;
-  sharedSecrets: string[];
-  clients?: DdnsClientConfig[] | undefined;
-  username?: string | undefined;
+  clients: DdnsClientConfig[];
   allowedHosts: string[];
   deniedHosts: string[];
   allowedZones: string[];
@@ -423,6 +419,7 @@ export type HostnamePolicy = {
 export type DdnsClientConfig = {
   username: string;
   sharedSecrets: string[];
+  allowAllHosts?: boolean | undefined;
   allowedHosts: string[];
   deniedHosts: string[];
   allowedZones: string[];

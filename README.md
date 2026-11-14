@@ -86,8 +86,7 @@ npm init @zimme/bunny-ddns
 ## Security Model
 
 - The Bunny account API key remains a Bunny Environment Secret.
-- DDNS clients receive a separate long, random shared secret. Optional
-  `DDNS_CLIENTS` credentials give each client its own username, secrets, and
+- `DDNS_CLIENTS` gives every client its own username, long random secrets, and
   hostname or zone scope; global authorization remains an upper bound.
 - HTTPS and HTTP Basic Auth are required by default.
 - Update addresses must be explicit request parameters; forwarding headers are
@@ -96,7 +95,7 @@ npm init @zimme/bunny-ddns
   request must match both lists.
 - Deny lists always win.
 - With no allow list, account-wide access requires the explicit
-  `DDNS_ALLOW_ALL_HOSTS=true` acknowledgement.
+  `DDNS_ALLOW_ALL_HOSTS=true` acknowledgement and client `allowAllHosts=true`.
 - Ambiguous multi-record sets are rejected by default.
 
 Every update reads the current Bunny DNS records. Configure clients to send

@@ -17,12 +17,11 @@ issue.
 ## Threat Model
 
 The intended deployment keeps the Bunny account API key inside Bunny Edge
-Scripting as a secret. DDNS clients receive only a separate DDNS secret. A
-client that knows a legacy DDNS secret can request updates for any hostname
-allowed by the script configuration. Optional `DDNS_CLIENTS` mode assigns each
-client its own Basic Auth username, secrets, and explicit hostname or zone allow
-lists. Requests must pass both the global and client policy. A client allow list
-cannot override a global deny rule or broaden the global scope.
+Scripting as a secret. `DDNS_CLIENTS` assigns every client its own Basic Auth
+username, secrets, and hostname or zone policy. Requests must pass both the
+global and client policy. A client allow list cannot override a global deny rule
+or broaden the global scope. Each credential identifies a named client; it is
+not bound to particular hardware.
 
 ### Agent-Assisted Setup
 
@@ -48,16 +47,18 @@ Use `DDNS_ALLOWED_HOSTS`, `DDNS_ALLOWED_ZONES`, `DDNS_DENIED_HOSTS`, and
 `DDNS_DENIED_ZONES` to scope DDNS authority. If both allow lists are present,
 the requested hostname and its selected Bunny zone must both match; the lists
 form an intersection. Deny rules always win. With no allow list, account-wide
-access requires the explicit `DDNS_ALLOW_ALL_HOSTS=true` acknowledgement.
+access requires the explicit `DDNS_ALLOW_ALL_HOSTS=true` acknowledgement and a
+client with `allowAllHosts=true`. Client `allowAllHosts` cannot be combined with
+non-empty client allow lists, and neither acknowledgement overrides deny rules.
 
 ### Individual Client Credentials
 
 Store `DDNS_CLIENTS` only as a Bunny Environment Secret: its JSON contains
-authentication secrets. Configure it in a user-controlled Bunny dashboard; never
-place it in repository files, GitHub variables, logs, or an agent-controlled
-terminal. It replaces legacy authentication and cannot coexist with
-`DDNS_SHARED_SECRET` or `DDNS_SHARED_SECRETS`, even when either legacy variable
-is empty. `DDNS_USERNAME` applies only to legacy authentication.
+authentication secrets. Configure it in a user-controlled Bunny dashboard or
+through the user-owned private provisioning command; never place it in
+repository files, GitHub variables, logs, or an agent-controlled terminal.
+`DDNS_SHARED_SECRET`, `DDNS_SHARED_SECRETS`, and `DDNS_USERNAME` are unsupported
+and cause startup to fail, including when empty.
 
 Give each client a distinct username and independent random secret. Multiple
 `sharedSecrets` within one client support rotation; removing that client or its
@@ -65,8 +66,7 @@ old secret revokes the affected credentials when the new configuration takes
 effect. Revocation does not delete DNS records or disconnect existing
 connections to the published service. Removing the final client leaves an
 invalid configuration; disable the deployment to revoke all clients. Empty or
-malformed client configuration fails closed without falling back to legacy
-authentication.
+malformed client configuration fails closed.
 
 ## Operational Guidance
 
@@ -77,13 +77,12 @@ must never be shared with DDNS or Bunny Hole. The local adapter permits
 unencrypted traffic only on the explicit IPv4 loopback harness; the Bunny
 adapter requires HTTPS. See its README for limits and unresolved routing risks.
 
-- Use a long random `DDNS_SHARED_SECRET`.
-- Set `DDNS_USERNAME` unless you need username-less compatibility.
+- Give each client a unique username and an independent long random secret in
+  `DDNS_CLIENTS`.
 - Prefer allow lists for shared or multi-domain Bunny accounts.
 - Keep `DDNS_ALLOW_INSECURE_HTTP=false` in Bunny.
-- In legacy mode, rotate secrets with `DDNS_SHARED_SECRETS=old,new`, update
-  clients, then remove the old secret. In client mode, rotate only that client
-  through its `sharedSecrets` array in Bunny Environment Secrets.
+- Rotate a client through its `sharedSecrets` array in Bunny Environment
+  Secrets: add the new secret, update the client, then remove the old secret.
 - Require clients to send `myip`, `ip`, or `myip6`. Treat `/checkip` as an
   optional diagnostic and configure a client to use it only after verifying the
   returned address on the deployed script; Bunny does not document a guaranteed

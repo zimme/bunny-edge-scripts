@@ -187,15 +187,12 @@ BunnySDK.net.http.serve(createBunnyDdnsHandler({ config }));
 function envExample(options: ScaffoldOptions): string {
   return `# Set these as Bunny Edge Script secrets, not committed values.
 BUNNY_API_KEY=
-# Use 32-256 printable ASCII characters without whitespace or commas.
-DDNS_SHARED_SECRET=
+# Private client credential JSON; use README.md or private provisioning.
+# Initial client username: ${options.ddnsUsername}
+# Never save real client JSON in this repository.
+DDNS_CLIENTS=
 
-# Advanced: configure DDNS_CLIENTS only as a private Bunny Environment Secret.
-# Remove both legacy DDNS_SHARED_SECRET(S) settings in client mode.
-# See the runtime README; never save client JSON in this repository.
-
-# Optional but recommended.
-DDNS_USERNAME=${options.ddnsUsername}
+# Global authorization ceiling; client scope must also allow the update.
 DDNS_ALLOWED_HOSTS=${options.allowedHosts}
 DDNS_ALLOWED_ZONES=${options.allowedZones}
 DDNS_ALLOW_ALL_HOSTS=${options.allowAllHosts}
@@ -226,6 +223,22 @@ function readme(options: ScaffoldOptions): string {
   const deploySection = options.deployMode === "bunny-git"
     ? bunnyGitInstructions()
     : githubActionInstructions();
+
+  const clientExample = JSON.stringify(
+    [{
+      username: options.ddnsUsername,
+      sharedSecrets: ["<unique secret from password manager>"],
+      allowedHosts: options.allowedHosts
+        ? options.allowedHosts.split(",").map((value) => value.trim())
+        : [],
+      allowedZones: options.allowedZones
+        ? options.allowedZones.split(",").map((value) => value.trim())
+        : [],
+      allowAllHosts: options.allowAllHosts,
+    }],
+    null,
+    2,
+  );
 
   return `# ${options.projectName}
 
@@ -261,11 +274,10 @@ Do not ask an AI agent to run \`deno task provision\`.
 Add these Environment Secrets in Bunny Edge Scripting Env Configuration:
 
 - \`BUNNY_API_KEY\`
-- \`DDNS_SHARED_SECRET\`
+- \`DDNS_CLIENTS\`
 
 Add these as Environment Variables:
 
-- \`DDNS_USERNAME\`
 - Optional: \`DDNS_ALLOWED_HOSTS\`
 - Optional: \`DDNS_ALLOWED_ZONES\`
 - \`DDNS_ALLOW_ALL_HOSTS\` (keep \`false\` unless account-wide authority was
@@ -279,16 +291,30 @@ Add \`DDNS_ALLOWED_HOSTS\` or \`DDNS_ALLOWED_ZONES\`, or regenerate with
 
 ## Individual Client Credentials
 
-This scaffold defaults to legacy shared-secret authentication. To use
-individually scoped credentials, configure \`DDNS_CLIENTS\` privately as a
-Bunny Environment Secret and remove \`DDNS_SHARED_SECRET\` and
-\`DDNS_SHARED_SECRETS\`, including empty entries. Keep the global scope
-above; each client also requires an explicit allow list. \`DDNS_USERNAME\`
-applies only to legacy mode. Follow the
+Every DDNS client has a named Basic Auth identity, its own secrets, and scope.
+Configure \`DDNS_CLIENTS\` privately as a Bunny Environment Secret using
+this structural example. Replace the secret placeholder in your password manager
+or Bunny dashboard; never save real credential JSON in this repository:
+
+\`\`\`json
+${clientExample}
+\`\`\`
+
+The initial client username is \`${options.ddnsUsername}\`. Both the global
+and client policy must allow an update; deny rules always win. When no allow
+lists were supplied, fill in both policies before deployment. Account-wide
+access requires explicit \`allowAllHosts: true\` in the client and
+\`DDNS_ALLOW_ALL_HOSTS=true\` globally. Each client secret must contain
+32 to 256 printable ASCII characters without whitespace or commas.
+
+Add separate objects with independent secrets for additional clients. Rotate a
+client by temporarily accepting old and new secrets in its \`sharedSecrets\`
+array, then removing the old secret. Remove its object to revoke the client
+without deleting DNS records. The runtime requires a non-empty array; disable
+the deployment to revoke all clients. See the
 [runtime configuration guide](https://github.com/zimme/bunny-edge-scripts/tree/main/packages/bunny-ddns-edge-script#individual-client-credentials)
-for schema, rotation, and revocation. Never save secret JSON in this repository
-or an agent-controlled terminal. The optional provisioning command configures
-legacy mode; do not run it over a client-mode deployment.
+for the full schema. Credentials must never pass through an agent-controlled
+terminal.
 
 ## Credential-Safe Provisioning
 
@@ -306,7 +332,9 @@ deno task provision
 \`\`\`
 
 The command requires an interactive private-terminal acknowledgement and asks
-for both credentials with hidden input. It never prints or saves either value.
+for the Bunny API key and initial client secret with hidden input. It constructs
+and stores \`DDNS_CLIENTS\` privately with the selected username and scope.
+It never prints or saves credentials or their JSON to files.
 An AI agent must not invoke this command, type into it, or observe its terminal.
 After it exits, paste only its \`SAFE AI HANDOFF\` block into the AI task. The
 agent can then continue with Git integration and deployment guidance.
@@ -397,8 +425,9 @@ handoff and must never be run by an AI agent.
 ## Deployment
 
 ${deploymentInstructions}
-- Required Bunny secrets: \`BUNNY_API_KEY\`, \`DDNS_SHARED_SECRET\`.
-- Required Bunny variable: \`DDNS_USERNAME\`; use the value in \`.env.example\`.
+- Required Bunny secrets: \`BUNNY_API_KEY\`, \`DDNS_CLIENTS\`.
+- Use the initial client identity documented in \`README.md\`; client scope
+  and global authorization must both allow each update.
 - Validate locally before committing or pushing.
 - Do not mutate live Bunny resources. Provisioning is a user-owned action.
 
@@ -521,7 +550,7 @@ function githubActionInstructions(): string {
   return `## Deployment: GitHub Action Upload
 
 This path stores only Bunny deployment credentials in GitHub. Runtime secrets
-such as \`BUNNY_API_KEY\` and \`DDNS_SHARED_SECRET\` still belong in Bunny Edge
+such as \`BUNNY_API_KEY\` and \`DDNS_CLIENTS\` still belong in Bunny Edge
 Script Env Configuration.
 
 1. In bunny.net, create a Standalone Edge Script.

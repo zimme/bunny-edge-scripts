@@ -76,8 +76,14 @@ function fixture(
     config: {
       apiBaseUrl: "https://api.bunny.net",
       bunnyApiKey: crypto.randomUUID(),
-      sharedSecrets: [secret],
-      username: "router",
+      clients: [{
+        username: "router",
+        sharedSecrets: [secret],
+        allowedHosts: ["home.example.com"],
+        deniedHosts: [],
+        allowedZones: [],
+        deniedZones: [],
+      }],
       allowedHosts: ["home.example.com"],
       deniedHosts: [],
       allowedZones: [],
