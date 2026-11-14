@@ -64,7 +64,7 @@ function nextSteps(
     : `\n     DDNS_ALLOW_ALL_HOSTS=${options.allowAllHosts}`;
   const scopeWarning =
     !options.allowedHosts && !options.allowedZones && !options.allowAllHosts
-      ? "\n  9. Before deployment, set DDNS_ALLOWED_HOSTS or DDNS_ALLOWED_ZONES. The generated configuration intentionally fails closed.\n"
+      ? "\n  9. Before deployment, set global and client hostname or zone allow lists. The generated configuration intentionally fails closed.\n"
       : "";
 
   return `\nNo credentials were requested or accessed.
@@ -78,9 +78,8 @@ Safest setup (recommended):
   6. Use entry file: generated/script.ts
   7. Under Env Configuration, add these Environment Secrets:
      BUNNY_API_KEY=<your Bunny account API key>
-     DDNS_SHARED_SECRET=<a strong, unique secret for inadyn>
-  8. Add these Environment Variables:
-     DDNS_USERNAME=${options.ddnsUsername}${scopeVariables}
+     DDNS_CLIENTS=<private credential JSON for ${options.ddnsUsername}; see README.md>
+  8. Add these Environment Variables:${scopeVariables}
 ${scopeWarning}
 
 Optional private-terminal provisioning:
@@ -248,7 +247,7 @@ Options:
   --deploy <mode>          bunny-git or github-action
   --registry <registry>    jsr or npm
   --version <range>        Runtime package version range
-  --username <name>        Required DDNS Basic Auth username
+  --username <name>        Initial client Basic Auth username
   --allowed-hosts <list>   Initial DDNS_ALLOWED_HOSTS value
   --allowed-zones <list>   Initial DDNS_ALLOWED_ZONES value
   --allow-all-hosts        Explicitly grant account-wide hostname access

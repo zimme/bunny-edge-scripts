@@ -30,9 +30,9 @@ function client(overrides: Record<string, unknown> = {}) {
 
 function environment(
   clients: unknown = [client()],
-  overrides: Record<string, string> = {},
+  overrides: Record<string, string | undefined> = {},
 ) {
-  const values: Record<string, string> = {
+  const values: Record<string, string | undefined> = {
     BUNNY_API_KEY: crypto.randomUUID(),
     DDNS_CLIENTS: JSON.stringify(clients),
     DDNS_ALLOWED_ZONES: "example.com",
@@ -86,7 +86,7 @@ Deno.test("reads scoped clients with normalized, intersecting policies", () => {
     allowedZones: ["Example.COM."],
     deniedHosts: ["*.blocked.example.com"],
   })]));
-  equal(cfg.sharedSecrets, []);
+  equal(cfg.clients.length, 1);
   equal(cfg.clients?.[0].allowedHosts, ["home.example.com"]);
   equal(cfg.clients?.[0].allowedZones, ["example.com"]);
   equal(cfg.clients?.[0].deniedZones, []);
@@ -122,6 +122,8 @@ Deno.test("rejects malformed, unscoped, duplicate or ambiguous client configurat
     [client({ allowedHosts: ["home.example.com"], deniedZones: null })],
     [client({ allowedHost: ["home.example.com"] })],
     [client({ allowAllHosts: true })],
+    [client({ allowAllHosts: null })],
+    [client({ allowAllHosts: "true" })],
   ];
   for (const value of invalid) {
     let error: unknown;
@@ -154,7 +156,9 @@ Deno.test("rejects malformed, unscoped, duplicate or ambiguous client configurat
 });
 
 Deno.test("client mode rejects every legacy secret variable including empty values", () => {
-  for (const name of ["DDNS_SHARED_SECRET", "DDNS_SHARED_SECRETS"]) {
+  for (
+    const name of ["DDNS_SHARED_SECRET", "DDNS_SHARED_SECRETS", "DDNS_USERNAME"]
+  ) {
     for (const value of ["", homeSecret]) {
       let rejected = false;
       try {
@@ -168,7 +172,8 @@ Deno.test("client mode rejects every legacy secret variable including empty valu
   const cfg = readConfigFromEnv(environment());
   let rejected = false;
   try {
-    createHandler({ config: { ...cfg, sharedSecrets: [homeSecret] } });
+    const staleConfig = { ...cfg, sharedSecrets: [homeSecret] };
+    createHandler({ config: staleConfig });
   } catch {
     rejected = true;
   }
@@ -195,7 +200,7 @@ Deno.test("authenticates the exact client username and secret without legacy fal
         sharedSecrets: [officeSecret],
         allowedHosts: ["office.example.com"],
       }),
-    ], { DDNS_USERNAME: "inadyn" })),
+    ])),
     fetcher: api.fetcher,
   });
   for (
@@ -407,4 +412,71 @@ Deno.test("rejects sparse programmatic client arrays at startup", () => {
     rejected = true;
   }
   equal(rejected, true);
+});
+
+Deno.test("requires named clients and rejects legacy-only authentication", () => {
+  for (
+    const values of [
+      { BUNNY_API_KEY: crypto.randomUUID() },
+      { BUNNY_API_KEY: crypto.randomUUID(), DDNS_SHARED_SECRET: homeSecret },
+      { BUNNY_API_KEY: crypto.randomUUID(), DDNS_SHARED_SECRETS: homeSecret },
+      { BUNNY_API_KEY: crypto.randomUUID(), DDNS_USERNAME: "home" },
+    ]
+  ) {
+    let rejected = false;
+    try {
+      readConfigFromEnv({
+        get: (name: string) =>
+          (values as Record<string, string | undefined>)[name],
+      });
+    } catch {
+      rejected = true;
+    }
+    equal(rejected, true);
+  }
+});
+
+Deno.test("client account-wide authority requires explicit acknowledgement and respects global scope", async () => {
+  for (
+    const rules of [
+      { allowedHosts: [], allowAllHosts: true },
+      { allowedHosts: [], allowedZones: [], allowAllHosts: true },
+    ]
+  ) {
+    const api = upstream();
+    const handler = createHandler({
+      config: readConfigFromEnv(
+        environment([client(rules)], {
+          DDNS_ALLOWED_HOSTS: "home.example.com",
+        }),
+      ),
+      fetcher: api.fetcher,
+    });
+    equal(await (await handler(request())).text(), "good 203.0.113.9\n");
+    equal(
+      await (await handler(request("office.example.com"))).text(),
+      "!yours\n",
+    );
+    equal(api.writes, ["/dnszone/1/records"]);
+  }
+  for (
+    const global of [
+      { DDNS_DENIED_HOSTS: "home.example.com" },
+      { DDNS_DENIED_ZONES: "example.com" },
+      { DDNS_ALLOW_ALL_HOSTS: "true", DDNS_DENIED_HOSTS: "home.example.com" },
+    ]
+  ) {
+    const api = upstream();
+    const handler = createHandler({
+      config: readConfigFromEnv(
+        environment(
+          [client({ allowedHosts: [], allowAllHosts: true })],
+          global,
+        ),
+      ),
+      fetcher: api.fetcher,
+    });
+    equal(await (await handler(request())).text(), "!yours\n");
+    equal(api.writes, []);
+  }
 });

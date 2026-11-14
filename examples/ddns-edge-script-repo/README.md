@@ -49,16 +49,17 @@ deployment repository, create a Standalone Edge Script, and connect it with:
 Add these as Bunny Environment Secrets:
 
 - `BUNNY_API_KEY`
-- `DDNS_SHARED_SECRET`
+- `DDNS_CLIENTS`
 
-Add `DDNS_USERNAME` when a fixed Basic Auth username is desired.
-
-For individual client credentials, manually configure `DDNS_CLIENTS` as a Bunny
-Environment Secret instead of `DDNS_SHARED_SECRET` or `DDNS_SHARED_SECRETS`.
-Remove both legacy settings, including empty entries. Each client needs its own
-explicit scope in addition to the global scope below. Follow the
-[runtime client configuration guide](../../packages/bunny-ddns-edge-script#individual-client-credentials);
-never commit the secret JSON or pass it through an AI terminal.
+Configure the initial client with username `inadyn`, its own password-manager
+secret, and `allowedHosts: ["home.example.com"]` in the private `DDNS_CLIENTS`
+JSON. Follow the
+[runtime client configuration guide](../../packages/bunny-ddns-edge-script#individual-client-credentials)
+for the full schema. Every client needs its own explicit scope or deliberate
+`allowAllHosts=true` acknowledgement in addition to the global scope below.
+Never commit secret JSON or pass it through an AI terminal. The old
+`DDNS_SHARED_SECRET`, `DDNS_SHARED_SECRETS`, and `DDNS_USERNAME` settings are
+unsupported and must be absent.
 
 Authorization must include at least one of:
 
@@ -78,7 +79,7 @@ The example workflow uploads `generated/script.ts`. Create a protected GitHub
 environment named `production`, then add `SCRIPT_ID` and `DEPLOY_KEY` as
 **environment secrets**.
 
-Those values authorize deployment only. `BUNNY_API_KEY` and `DDNS_SHARED_SECRET`
+Those values authorize deployment only. `BUNNY_API_KEY` and `DDNS_CLIENTS`
 remain Bunny Environment Secrets and must not be stored in GitHub.
 
 ## inadyn

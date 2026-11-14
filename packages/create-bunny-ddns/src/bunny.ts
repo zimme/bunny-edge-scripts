@@ -78,7 +78,6 @@ export async function provisionBunnyEdgeScript(
 
   try {
     const variables: Array<[string, string]> = [
-      ["DDNS_USERNAME", validated.ddnsUsername],
       [
         "DDNS_ALLOW_ALL_HOSTS",
         String(validated.allowAllHosts),
@@ -96,8 +95,18 @@ export async function provisionBunnyEdgeScript(
 
     await upsertSecret(
       script.Id,
-      "DDNS_SHARED_SECRET",
-      validated.ddnsSharedSecret,
+      "DDNS_CLIENTS",
+      JSON.stringify([{
+        username: validated.ddnsUsername,
+        sharedSecrets: [validated.ddnsSharedSecret],
+        allowedHosts: validated.allowedHosts
+          ? validated.allowedHosts.split(",")
+          : [],
+        allowedZones: validated.allowedZones
+          ? validated.allowedZones.split(",")
+          : [],
+        allowAllHosts: validated.allowAllHosts,
+      }]),
       validated.apiKey,
       fetcher,
     );

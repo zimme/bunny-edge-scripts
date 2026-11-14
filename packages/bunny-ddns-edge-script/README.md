@@ -111,24 +111,17 @@ integration keeps them out of GitHub.
 
 ### Secrets
 
-| Name                  | Required     | Description                                                                                                                             |
-| --------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `BUNNY_API_KEY`       | Yes          | Bunny account API key used to discover zones and mutate records. `BUNNY_ACCESS_KEY` is accepted as an alias.                            |
-| `DDNS_SHARED_SECRET`  | Legacy mode* | Password sent by the DDNS client through HTTP Basic Auth. It must be 32 to 256 printable ASCII characters without whitespace or commas. |
-| `DDNS_SHARED_SECRETS` | No           | Comma-separated secrets used for rotation. When present, it replaces `DDNS_SHARED_SECRET`; each secret has the same validation rules.   |
-
-`DDNS_CLIENTS` is required only for individual client authentication and
-replaces the two legacy shared-secret settings.
-
-Use either legacy shared-secret authentication or the optional `DDNS_CLIENTS`
-mode below. At least one shared secret is required in legacy mode.
+| Name            | Required | Description                                                                                                  |
+| --------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `BUNNY_API_KEY` | Yes      | Bunny account API key used to discover zones and mutate records. `BUNNY_ACCESS_KEY` is accepted as an alias. |
+| `DDNS_CLIENTS`  | Yes      | Non-empty JSON array of named clients, their authentication secrets, and hostname or zone policy.            |
 
 ### Individual Client Credentials
 
-`DDNS_CLIENTS` is an optional **Bunny Environment Secret** containing a
-non-empty JSON array. This is a structural example only; replace the secret
-placeholder privately in your password manager or Bunny dashboard, never in this
-repository:
+Every DDNS client uses its own Basic Auth username and secret. Store the
+`DDNS_CLIENTS` JSON only as a **Bunny Environment Secret**. This is a structural
+example; replace the secret placeholder privately in your password manager or
+Bunny dashboard, never in this repository:
 
 ```json
 [
@@ -149,24 +142,34 @@ repository:
 Each client requires a unique, case-sensitive username of 1 to 128 characters
 from `A-Z`, `a-z`, `0-9`, `.`, `_`, `@`, `+`, and `-`; a non-empty
 `sharedSecrets` string array; and at least one non-empty `allowedHosts` or
-`allowedZones` string array. Secrets use the same 32-to-256-character rules as
-legacy secrets. Optional `deniedHosts` and `deniedZones` are string arrays.
-Omitted policy arrays are empty; hostname patterns use the global rules below.
-Unknown object fields and malformed arrays are rejected to catch configuration
-mistakes.
+`allowedZones` string array unless `allowAllHosts=true` explicitly acknowledges
+account-wide authority. Each secret must contain 32 to 256 printable ASCII
+characters without whitespace or commas. Optional `deniedHosts` and
+`deniedZones` are string arrays. Omitted policy arrays are empty; hostname
+patterns use the global rules below. Unknown object fields and malformed arrays
+are rejected to catch configuration mistakes.
+
+For a deliberately account-wide client, set its `allowAllHosts` boolean to
+`true` instead of providing client allow lists. It cannot be combined with
+non-empty client allow lists. Global authorization still applies: account-wide
+authority across all Bunny zones also requires `DDNS_ALLOW_ALL_HOSTS=true` and
+no global allow lists. Both global and client deny rules remain authoritative.
+Prefer narrowly scoped clients whenever possible.
 
 The client policy and global policy must both allow an update. Within either
 policy, hostname and zone allow lists intersect, and deny lists always win.
-Global scope remains required, even with client credentials; a client cannot
-grant itself account-wide access. `DDNS_USERNAME` is ignored in client mode.
-Clients keep using standard Basic Auth and the existing DynDNS endpoints.
+Global scope remains required. Clients keep using standard Basic Auth and the
+existing DynDNS endpoints; credentials identify a client without binding it to
+particular hardware.
 
-To migrate, remove `DDNS_SHARED_SECRET` and `DDNS_SHARED_SECRETS` from the Bunny
-configuration, including empty entries, and configure `DDNS_CLIENTS` privately
-in the Bunny dashboard. These modes are mutually exclusive; invalid or empty
-client configuration fails startup without falling back to legacy secrets. The
-generator and private provisioning command use legacy mode by default; configure
-client mode manually rather than running provisioning over it.
+`DDNS_SHARED_SECRET`, `DDNS_SHARED_SECRETS`, and `DDNS_USERNAME` are unsupported
+and cause startup to fail, including when configured as empty entries. Remove
+those settings and configure `DDNS_CLIENTS`. Missing, empty, or malformed client
+configuration fails startup. The generator and private provisioning command
+configure the initial scoped client using the chosen username and scope. For
+manual dashboard setup, use that same username, secret, and scope in the client
+JSON and copy the selected global scope from `.env.example` into Bunny
+variables.
 
 Rotate one client by adding a new secret to its `sharedSecrets`, updating that
 client, and removing the old secret. Revoke a client by removing its object from
@@ -177,14 +180,13 @@ committed files, GitHub settings, logs, or agent-controlled terminals.
 
 ### Authorization
 
-| Name                   | Default      | Description                                                                                               |
-| ---------------------- | ------------ | --------------------------------------------------------------------------------------------------------- |
-| `DDNS_USERNAME`        | Any username | Legacy mode only: when set, Basic Auth must contain this exact username as well as a valid shared secret. |
-| `DDNS_ALLOWED_HOSTS`   | Empty        | Comma-separated exact or wildcard hostname patterns, such as `home.example.com,*.home.example.net`.       |
-| `DDNS_DENIED_HOSTS`    | Empty        | Comma-separated exact or wildcard hostname patterns. A match always denies the request.                   |
-| `DDNS_ALLOWED_ZONES`   | Empty        | Comma-separated exact or wildcard Bunny DNS zone patterns.                                                |
-| `DDNS_DENIED_ZONES`    | Empty        | Comma-separated zone patterns. A match always denies the request.                                         |
-| `DDNS_ALLOW_ALL_HOSTS` | `false`      | Explicit acknowledgement that the DDNS secret may update any hostname in every discovered Bunny zone.     |
+| Name                   | Default | Description                                                                                         |
+| ---------------------- | ------- | --------------------------------------------------------------------------------------------------- |
+| `DDNS_ALLOWED_HOSTS`   | Empty   | Comma-separated exact or wildcard hostname patterns, such as `home.example.com,*.home.example.net`. |
+| `DDNS_DENIED_HOSTS`    | Empty   | Comma-separated exact or wildcard hostname patterns. A match always denies the request.             |
+| `DDNS_ALLOWED_ZONES`   | Empty   | Comma-separated exact or wildcard Bunny DNS zone patterns.                                          |
+| `DDNS_DENIED_ZONES`    | Empty   | Comma-separated zone patterns. A match always denies the request.                                   |
+| `DDNS_ALLOW_ALL_HOSTS` | `false` | Explicit acknowledgement of global account-wide authority; individual client policies still apply.  |
 
 At least one of `DDNS_ALLOWED_HOSTS`, `DDNS_ALLOWED_ZONES`, or
 `DDNS_ALLOW_ALL_HOSTS=true` is required. Configuration otherwise fails closed.

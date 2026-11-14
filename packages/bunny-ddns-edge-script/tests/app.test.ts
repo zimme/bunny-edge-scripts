@@ -11,9 +11,9 @@ import {
 
 type RecordListItem = Omit<BunnyDnsRecord, "Type"> & { Type?: number };
 
-const DDNS_SECRET = "0123456789abcdef0123456789abcdef";
-const OLD_DDNS_SECRET = "old-0123456789abcdef0123456789ab";
-const NEW_DDNS_SECRET = "new-0123456789abcdef0123456789ab";
+const DDNS_SECRET: string = crypto.randomUUID();
+const OLD_DDNS_SECRET: string = crypto.randomUUID();
+const NEW_DDNS_SECRET: string = crypto.randomUUID();
 
 function assertEqual<T>(actual: T, expected: T): void {
   if (actual !== expected) {
@@ -55,8 +55,15 @@ function config(overrides: Partial<RuntimeConfig> = {}): RuntimeConfig {
   return {
     apiBaseUrl: "https://api.bunny.net",
     bunnyApiKey: "account-api-key",
-    sharedSecrets: [DDNS_SECRET],
-    username: "inadyn",
+    clients: [{
+      username: "inadyn",
+      sharedSecrets: [DDNS_SECRET],
+      allowedHosts: [],
+      deniedHosts: [],
+      allowedZones: [],
+      deniedZones: [],
+      allowAllHosts: true,
+    }],
     allowedHosts: [],
     deniedHosts: [],
     allowedZones: [],
@@ -71,6 +78,10 @@ function config(overrides: Partial<RuntimeConfig> = {}): RuntimeConfig {
     managedComment: "Managed by test",
     ...overrides,
   };
+}
+
+function encodedClients(sharedSecrets: string[] = [DDNS_SECRET]): string {
+  return JSON.stringify([{ ...config().clients[0], sharedSecrets }]);
 }
 
 function auth(password = DDNS_SECRET, username = "inadyn"): string {
@@ -254,10 +265,9 @@ Deno.test("reads required and optional configuration from environment values", (
   const values = new Map([
     ["BUNNY_API_KEY", "account-api-key"],
     [
-      "DDNS_SHARED_SECRETS",
-      `${OLD_DDNS_SECRET},${NEW_DDNS_SECRET}`,
+      "DDNS_CLIENTS",
+      encodedClients([OLD_DDNS_SECRET, NEW_DDNS_SECRET]),
     ],
-    ["DDNS_USERNAME", "inadyn"],
     ["DDNS_ALLOWED_HOSTS", "home.example.com,*.lan.example.com"],
     ["DDNS_DENIED_ZONES", "blocked.example.com"],
     ["DDNS_AUTO_CREATE", "false"],
@@ -274,11 +284,11 @@ Deno.test("reads required and optional configuration from environment values", (
     },
   });
 
-  assertDeepEqual(parsed.sharedSecrets, [
+  assertDeepEqual(parsed.clients[0].sharedSecrets, [
     OLD_DDNS_SECRET,
     NEW_DDNS_SECRET,
   ]);
-  assertEqual(parsed.username, "inadyn");
+  assertEqual(parsed.clients[0].username, "inadyn");
   assertDeepEqual(parsed.allowedHosts, [
     "home.example.com",
     "*.lan.example.com",
@@ -310,19 +320,19 @@ Deno.test("requires Bunny API and DDNS secrets in configuration", () => {
   );
 });
 
-Deno.test("treats the singular secret as one exact credential", () => {
+Deno.test("reads one named client credential exactly", () => {
   const parsed = readConfigFromEnv({
     get(name: string) {
       const values: Record<string, string> = {
         BUNNY_API_KEY: "account-api-key",
-        DDNS_SHARED_SECRET: DDNS_SECRET,
+        DDNS_CLIENTS: encodedClients(),
         DDNS_ALLOW_ALL_HOSTS: "true",
       };
       return values[name];
     },
   });
 
-  assertDeepEqual(parsed.sharedSecrets, [DDNS_SECRET]);
+  assertDeepEqual(parsed.clients[0].sharedSecrets, [DDNS_SECRET]);
 });
 
 Deno.test("rejects weak or ambiguous DDNS shared secrets", () => {
@@ -339,7 +349,7 @@ Deno.test("rejects weak or ambiguous DDNS shared secrets", () => {
         get(name: string) {
           const values: Record<string, string> = {
             BUNNY_API_KEY: "account-api-key",
-            DDNS_SHARED_SECRET: secret,
+            DDNS_CLIENTS: encodedClients([secret]),
             DDNS_ALLOW_ALL_HOSTS: "true",
           };
           return values[name];
@@ -350,9 +360,9 @@ Deno.test("rejects weak or ambiguous DDNS shared secrets", () => {
 
   for (
     const secrets of [
-      `${OLD_DDNS_SECRET}, ${NEW_DDNS_SECRET}`,
-      `${OLD_DDNS_SECRET},,${NEW_DDNS_SECRET}`,
-      `${OLD_DDNS_SECRET}\n${NEW_DDNS_SECRET}`,
+      [OLD_DDNS_SECRET, ` ${NEW_DDNS_SECRET}`],
+      [OLD_DDNS_SECRET, "", NEW_DDNS_SECRET],
+      [`${OLD_DDNS_SECRET}\n${NEW_DDNS_SECRET}`],
     ]
   ) {
     assertThrows(() =>
@@ -360,7 +370,7 @@ Deno.test("rejects weak or ambiguous DDNS shared secrets", () => {
         get(name: string) {
           const values: Record<string, string> = {
             BUNNY_API_KEY: "account-api-key",
-            DDNS_SHARED_SECRETS: secrets,
+            DDNS_CLIENTS: encodedClients(secrets),
             DDNS_ALLOW_ALL_HOSTS: "true",
           };
           return values[name];
@@ -376,7 +386,7 @@ Deno.test("rejects invalid security configuration instead of failing open", () =
       get(name: string) {
         const values: Record<string, string> = {
           BUNNY_API_KEY: "account-api-key",
-          DDNS_SHARED_SECRET: DDNS_SECRET,
+          DDNS_CLIENTS: encodedClients(),
           DDNS_AUTO_CREATE: "flase",
         };
         return values[name];
@@ -389,7 +399,7 @@ Deno.test("rejects invalid security configuration instead of failing open", () =
       get(name: string) {
         const values: Record<string, string> = {
           BUNNY_API_KEY: "account-api-key",
-          DDNS_SHARED_SECRET: DDNS_SECRET,
+          DDNS_CLIENTS: encodedClients(),
           DDNS_MAX_MUTATIONS: "41",
         };
         return values[name];
@@ -403,7 +413,7 @@ Deno.test("rejects invalid security configuration instead of failing open", () =
         get(name: string) {
           const values: Record<string, string> = {
             BUNNY_API_KEY: "account-api-key",
-            DDNS_SHARED_SECRET: DDNS_SECRET,
+            DDNS_CLIENTS: encodedClients(),
             DDNS_ALLOWED_HOSTS: pattern,
           };
           return values[name];
@@ -1220,7 +1230,12 @@ Deno.test("validates direct handler configuration before serving", () => {
   );
   assertThrows(() =>
     createHandler({
-      config: config({ sharedSecrets: [`${DDNS_SECRET} `] }),
+      config: config({
+        clients: [{
+          ...config().clients[0],
+          sharedSecrets: [`${DDNS_SECRET} `],
+        }],
+      }),
     })
   );
 });

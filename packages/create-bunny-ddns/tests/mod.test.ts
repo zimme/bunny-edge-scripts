@@ -1,3 +1,4 @@
+import { readBunnyDdnsConfigFromEnv } from "@zimme/bunny-ddns-edge-script";
 import { defaultOptions, scaffoldProject } from "../src/mod.ts";
 import { main } from "../src/main.ts";
 import { provisionBunnyEdgeScript } from "../src/bunny.ts";
@@ -6,7 +7,7 @@ import {
   provisionFromPrivateTerminal,
 } from "../src/provision.ts";
 
-const DDNS_SECRET = "a-strong-ddns-secret-from-a-password-manager";
+const DDNS_SECRET: string = crypto.randomUUID();
 
 function assertIncludes(value: string, expected: string): void {
   if (!value.includes(expected)) {
@@ -262,8 +263,8 @@ Deno.test("Bunny provisioning creates a script and configures secrets", async ()
   if (result.scriptId !== 42) {
     throw new Error("Unexpected script ID");
   }
-  if (requests.length !== 7) {
-    throw new Error(`Expected 7 Bunny requests, received ${requests.length}`);
+  if (requests.length !== 6) {
+    throw new Error(`Expected 6 Bunny requests, received ${requests.length}`);
   }
   const listUrl = new URL(requests[0].url);
   if (
@@ -307,14 +308,6 @@ Deno.test("Bunny provisioning creates a script and configures secrets", async ()
     {
       url: "https://api.bunny.net/compute/script/42/variables",
       body: {
-        Name: "DDNS_USERNAME",
-        Required: false,
-        DefaultValue: "inadyn",
-      },
-    },
-    {
-      url: "https://api.bunny.net/compute/script/42/variables",
-      body: {
         Name: "DDNS_ALLOW_ALL_HOSTS",
         Required: false,
         DefaultValue: "false",
@@ -330,7 +323,16 @@ Deno.test("Bunny provisioning creates a script and configures secrets", async ()
     },
     {
       url: "https://api.bunny.net/compute/script/42/secrets",
-      body: { Name: "DDNS_SHARED_SECRET", Secret: DDNS_SECRET },
+      body: {
+        Name: "DDNS_CLIENTS",
+        Secret: JSON.stringify([{
+          username: "inadyn",
+          sharedSecrets: [DDNS_SECRET],
+          allowedHosts: ["home.example.com"],
+          allowedZones: [],
+          allowAllHosts: false,
+        }]),
+      },
     },
     {
       url: "https://api.bunny.net/compute/script/42/secrets",
@@ -495,10 +497,10 @@ Deno.test("Bunny provisioning accepts explicit account-wide authority", async ()
     allowAllHosts: true,
   }, fetcher as typeof fetch);
 
-  if (requests.length !== 6) {
+  if (requests.length !== 5) {
     throw new Error("Unexpected request count for account-wide provisioning");
   }
-  const authority = JSON.parse(String(requests[3].init?.body));
+  const authority = JSON.parse(String(requests[2].init?.body));
   if (
     authority.Name !== "DDNS_ALLOW_ALL_HOSTS" ||
     authority.DefaultValue !== "true"
@@ -720,7 +722,7 @@ Deno.test("private-terminal provisioning never prints credentials", async () => 
     fetcher as typeof fetch,
   );
 
-  if (result.scriptId !== 42 || requests.length !== 7) {
+  if (result.scriptId !== 42 || requests.length !== 6) {
     throw new Error("Private-terminal provisioning did not complete");
   }
   const transcript = [...outputs, ...prompts].join("\n");
@@ -929,7 +931,7 @@ Deno.test("scaffold CLI prints credential-safe Bunny handoff", async () => {
       "Safest setup (recommended)",
       "Deploy and edit with GitHub",
       "BUNNY_API_KEY=<your Bunny account API key>",
-      "DDNS_SHARED_SECRET=<a strong, unique secret for inadyn>",
+      "DDNS_CLIENTS=<private credential JSON for inadyn; see README.md>",
       "DDNS_ALLOW_ALL_HOSTS=false",
       "generated configuration intentionally fails closed",
       "deno task provision",
@@ -938,5 +940,99 @@ Deno.test("scaffold CLI prints credential-safe Bunny handoff", async () => {
     ]
   ) {
     assertIncludes(output, expected);
+  }
+});
+
+Deno.test("provisioned client credentials load in the runtime for every supported scope", async () => {
+  for (
+    const scope of [
+      {
+        allowedHosts: " HOME.EXAMPLE.COM. ",
+        allowedZones: "",
+        allowAllHosts: false,
+      },
+      { allowedHosts: "", allowedZones: "EXAMPLE.COM.", allowAllHosts: false },
+      {
+        allowedHosts: "home.example.com",
+        allowedZones: "example.com",
+        allowAllHosts: false,
+      },
+      { allowedHosts: "", allowedZones: "", allowAllHosts: true },
+    ]
+  ) {
+    const secret = '"' + crypto.randomUUID() + "\\";
+    const values: Record<string, string> = {};
+    let calls = 0;
+    await provisionBunnyEdgeScript(
+      {
+        apiKey: crypto.randomUUID(),
+        scriptName: "scoped-test",
+        ddnsUsername: "router",
+        ddnsSharedSecret: secret,
+        ...scope,
+      },
+      ((_input, init) => {
+        calls++;
+        if (calls === 1) {
+          return Promise.resolve(
+            Response.json({ Items: [], HasMoreItems: false }),
+          );
+        }
+        if (calls === 2) {
+          return Promise.resolve(Response.json({ Id: 42 }, { status: 201 }));
+        }
+        const body = JSON.parse(String(init?.body));
+        values[body.Name] = body.Secret ?? body.DefaultValue;
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }) as typeof fetch,
+    );
+    const config = readBunnyDdnsConfigFromEnv({ get: (name) => values[name] });
+    const initial = config.clients[0];
+    if (
+      initial.username !== "router" || initial.sharedSecrets[0] !== secret ||
+      initial.allowAllHosts !== scope.allowAllHosts ||
+      initial.allowedHosts.join(",") !==
+        (scope.allowedHosts ? "home.example.com" : "") ||
+      initial.allowedZones.join(",") !==
+        (scope.allowedZones ? "example.com" : "") ||
+      "DDNS_USERNAME" in values || "DDNS_SHARED_SECRET" in values ||
+      "DDNS_SHARED_SECRETS" in values
+    ) {
+      throw new Error(
+        "Provisioning did not produce the required scoped client configuration",
+      );
+    }
+  }
+});
+
+Deno.test("scaffolds require client JSON without emitting legacy authentication settings", async () => {
+  const directory = await Deno.makeTempDir();
+  await scaffoldProject({
+    ...defaultOptions(),
+    directory,
+    installDependencies: false,
+    ddnsUsername: "home-router",
+    allowedHosts: "home.example.com",
+  });
+  const env = await Deno.readTextFile(`${directory}/.env.example`);
+  const readme = await Deno.readTextFile(`${directory}/README.md`);
+  if (
+    !env.includes("DDNS_CLIENTS=") ||
+    !env.includes("Initial client username: home-router")
+  ) {
+    throw new Error("Scaffold did not require named client credentials");
+  }
+  for (const text of [env, readme]) {
+    if (/DDNS_(SHARED_SECRETS?|USERNAME)\s*=/.test(text)) {
+      throw new Error("Scaffold emitted obsolete authentication settings");
+    }
+  }
+  if (
+    !readme.includes('"username": "home-router"') ||
+    !readme.includes('"home.example.com"')
+  ) {
+    throw new Error(
+      "Client configuration example did not match the requested identity and scope",
+    );
   }
 });

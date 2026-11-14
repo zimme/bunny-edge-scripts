@@ -76,10 +76,10 @@ export async function provisionFromPrivateTerminal(
   }
 
   const ddnsSharedSecret = await io.readSecret(
-    "DDNS shared secret from your password manager: ",
+    "Initial DDNS client secret from your password manager: ",
   );
   validateDdnsSharedSecret(ddnsSharedSecret);
-  const confirmation = await io.readSecret("Confirm DDNS shared secret: ");
+  const confirmation = await io.readSecret("Confirm DDNS client secret: ");
   if (!timingSafeEqual(ddnsSharedSecret, confirmation)) {
     throw new Error("DDNS shared secret confirmation did not match.");
   }
